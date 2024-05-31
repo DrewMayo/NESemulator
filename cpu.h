@@ -1,15 +1,56 @@
+#include <stdbool.h>
 #include <stdint.h>
-#define CPURAMSIZE 65536
+#include <stdio.h>
+
+
+typedef struct {
+  bool Negative;
+  bool Overflow;
+  bool Break;
+  bool Decimal;
+  bool Interrupt;
+  bool Zero;
+  bool Carry;
+} status_t;
+
 typedef struct {
   uint8_t AC;  // Accumulator Register
   uint8_t X;   // X register
   uint8_t Y;   // Y register
   uint8_t SP;  // stack pointer from $0100 to $01FF
-  uint8_t SR;  // Status Register
+  status_t SR; // status register
   uint16_t PC; // Program Counter
-  uint16_t ram[CPURAMSIZE]; // The systems ram
-} cpu6502;
+} cpu_t;
 
+typedef enum {
+  IMPLIED,
+  ACCUMULATOR,
+  IMMEDIATE,
+  ZEROPAGE,
+  ZEROPAGEX,
+  ZEROPAGEY,
+  ABSOLUTE,
+  ABSOLUTEX,
+  ABSOLUTEY,
+  ABSOLUTEINDIRECT,
+  INDIRECTX,
+  INDIRECTY,
+  RELATIVE,
+} addressing_mode_t;
+
+typedef enum {
+  BIT0 = 0b00000001,
+  BIT1 = 0b00000010,
+  BIT2 = 0b00000100,
+  BIT3 = 0b00001000,
+  BIT4 = 0b00010000,
+  BIT5 = 0b00100000,
+  BIT6 = 0b01000000,
+  BIT7 = 0b10000000,
+} bitmasks8_t;
+
+
+int run(cpu_t *cpu, uint8_t *memory);
 // Status reguster bit 7 to 0
 //
 // N .... Negative
