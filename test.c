@@ -408,7 +408,8 @@ bool test_ASL_zero_page(emulator_t emu) {
   emu.memory[0x8001] = 0x0A;
   emu.memory[0x000A] = 0xFF;
   run(&emu.cpu, emu.memory);
-  assert(emu.memory[0x000A] == 0xFE); assert(emu.cpu.SR.Carry == true);
+  assert(emu.memory[0x000A] == 0xFE);
+  assert(emu.cpu.SR.Carry == true);
   assert(emu.cpu.SR.Negative == true);
   assert(emu.cpu.SR.Zero == true);
   assert(emu.cpu.PC == 0x8002);
@@ -461,7 +462,6 @@ bool test_ASL_absolutex(emulator_t emu) {
   printf("test_ASL_absolutex PASSED!\n");
   return true;
 }
-
 int run_unit_tests() {
   emulator_t emu;
   emu.cpu.PC = 0x8000;
@@ -519,6 +519,5 @@ int run_unit_tests() {
   printf("===========================\n");
   printf(ANSI_COLOR_GREEN "PASSED ALL ASL TESTS!\n" ANSI_COLOR_RESET);
   printf("===========================\n");
-
   return 1;
 }

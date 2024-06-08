@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include <stdio.h>
 
-
 typedef struct {
   bool Negative;
   bool Overflow;
@@ -33,6 +32,7 @@ typedef enum {
   ABSOLUTEX,
   ABSOLUTEY,
   ABSOLUTEINDIRECT,
+  INDIRECT,
   INDIRECTX,
   INDIRECTY,
   RELATIVE,
@@ -49,8 +49,14 @@ typedef enum {
   BIT7 = 0b10000000,
 } bitmasks8_t;
 
-
 int run(cpu_t *cpu, uint8_t *memory);
+
+typedef struct {
+  char name[4];
+  uint8_t opcode;
+  addressing_mode_t addr_mode;
+  uint8_t cycles;
+} instruction_t;
 // Status reguster bit 7 to 0
 //
 // N .... Negative

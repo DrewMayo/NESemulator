@@ -10,6 +10,7 @@ int main(int argc, char *argv[]) {
   }
   // init emulator
   emulator_t *emu = malloc(sizeof(emulator_t));
+  int cycles = run(&emu->cpu, emu->memory);
   run_unit_tests();
   /*
     // SDL
