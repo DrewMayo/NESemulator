@@ -1,15 +1,16 @@
 #include "cpu.h"
-#include <stdbool.h>
+#include "test.h"
 #include <stdint.h>
-#include <string.h>
 #define unlikely(x) __builtin_expect(!!(x), 0)
 #define likely(x) __builtin_expect(!!(x), 1)
 
 uint8_t combine_SR(status_t SR);
+void expand_SR(cpu_t *cpu, uint8_t SR);
 uint8_t pageCrossed(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory,
                     uint16_t memAddr);
 uint16_t fetchAddrMode(addressing_mode_t addr_mode, cpu_t *cpu,
                        uint8_t *memory);
+
 instruction_t *create_opcodes();
 // ADC - ADD with Carry
 uint8_t ADC(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
@@ -21,21 +22,12 @@ uint8_t ADC(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint8_t cycles = 0;
   cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
   cpu->AC = (uint8_t)added;
-  if (added > 255) {
-    cpu->SR.Carry = true;
-  }
+  cpu->SR.Carry = (added > 255);
   // formula for determining overflow
   // (result ^ M) & (result ^ mem) & BIT7
-  if ((AC ^ added) & (added ^ mem) & BIT7) {
-    cpu->SR.Overflow = true;
-  }
-
-  if (cpu->AC == 0) {
-    cpu->SR.Zero = true;
-  }
-  if (cpu->AC & BIT7) {
-    cpu->SR.Negative = true;
-  }
+  cpu->SR.Overflow = (AC ^ added) & (added ^ mem) & BIT7;
+  cpu->SR.Zero = (cpu->AC == 0);
+  cpu->SR.Negative = (cpu->AC & BIT7);
   return cycles;
 }
 // AND - Logical And
@@ -44,25 +36,16 @@ uint8_t AND(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint8_t cycles = 0;
   cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
   cpu->AC &= memory[memAddr];
-  if (cpu->AC == 0) {
-    cpu->SR.Zero = true;
-  }
-  if (cpu->AC & BIT7) {
-    cpu->SR.Negative = true;
-  }
+  cpu->SR.Zero = (cpu->AC == 0);
+  cpu->SR.Negative = cpu->AC & BIT7;
   return cycles;
 }
 
 void ASL(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
-  uint8_t *ptr;
-  if (addr_mode == ACCUMULATOR) {
-    ptr = &cpu->AC;
-  } else {
-    ptr = &memory[memAddr];
-  }
+  uint8_t *ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &memory[memAddr];
   cpu->SR.Carry = *ptr & BIT7;
-  *ptr *= 2;
+  *ptr <<= 1;
   cpu->SR.Zero = cpu->AC == 0;
   cpu->SR.Negative = *ptr & BIT7;
 }
@@ -71,6 +54,7 @@ uint8_t BCC(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
   uint8_t cycles = 0;
   if (cpu->SR.Carry == false) {
+    cpu->PC = memAddr + 1;
     // plus one cycle if page crosssed
     cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
     // on sucess add one cycles
@@ -83,6 +67,7 @@ uint8_t BCS(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
   uint8_t cycles = 0;
   if (cpu->SR.Carry == true) {
+    cpu->PC = memAddr + 1;
     // plus one cycle if page crosssed
     cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
     // on sucess add one cycles
@@ -94,6 +79,7 @@ uint8_t BEQ(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
   uint8_t cycles = 0;
   if (cpu->SR.Zero == true) {
+    cpu->PC = memAddr + 1;
     // plus one cycle if page crosssed
     cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
     // on sucess add one cycles
@@ -106,15 +92,16 @@ uint8_t BEQ(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
 // set
 void BIT(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
-  cpu->SR.Zero = cpu->AC & memory[memAddr];
-  cpu->SR.Overflow = cpu->AC & memory[memAddr] & BIT6;
-  cpu->SR.Negative = cpu->AC & memory[memAddr] & BIT7;
+  cpu->SR.Zero = (cpu->AC & memory[memAddr]) == 0;
+  cpu->SR.Overflow = memory[memAddr] & BIT6;
+  cpu->SR.Negative = memory[memAddr] & BIT7;
 }
 
 uint8_t BMI(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
   uint8_t cycles = 0;
   if (cpu->SR.Negative == true) {
+    cpu->PC = memAddr + 1;
     // plus one cycle if page crosssed
     cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
     // on sucess add one cycles
@@ -127,6 +114,7 @@ uint8_t BNE(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
   uint8_t cycles = 0;
   if (cpu->SR.Zero == false) {
+    cpu->PC = memAddr + 1;
     // plus one cycle if page crosssed
     cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
     // on sucess add one cycles
@@ -139,6 +127,7 @@ uint8_t BPL(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
   uint8_t cycles = 0;
   if (cpu->SR.Negative == false) {
+    cpu->PC = memAddr + 1;
     // plus one cycle if page crosssed
     cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
     // on sucess add one cycles
@@ -150,9 +139,11 @@ uint8_t BPL(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
 // CHECK IT LATER
 void BRK(cpu_t *cpu, uint8_t *memory) {
   cpu->SR.Break = true;
-  memory[cpu->SP] = cpu->PC;
+  memory[cpu->SP + 0x0100] = (uint8_t)cpu->PC >> 8;
   cpu->SP--;
-  memory[cpu->SP] = combine_SR(cpu->SR);
+  memory[cpu->SP + 0x0100] = (uint8_t)cpu->PC;
+  cpu->SP--;
+  memory[cpu->SP + 0x0100] = combine_SR(cpu->SR);
   cpu->SP--;
   cpu->PC = ((uint16_t)memory[0xFFFE] << 8) + (uint16_t)memory[0xFFFF];
 }
@@ -161,6 +152,7 @@ uint8_t BVC(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
   uint8_t cycles = 0;
   if (cpu->SR.Overflow == false) {
+    cpu->PC = memAddr + 1;
     // plus one cycle if page crosssed
     cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
     // on sucess add one cycles
@@ -173,6 +165,7 @@ uint8_t BVS(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
   uint8_t cycles = 0;
   if (cpu->SR.Overflow == true) {
+    cpu->PC = memAddr + 1;
     // plus one cycle if page crosssed
     cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
     // on sucess add one cycles
@@ -182,85 +175,307 @@ uint8_t BVS(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
 }
 
 void CLC(cpu_t *cpu) { cpu->SR.Carry = false; }
+
 void CLD(cpu_t *cpu) { cpu->SR.Decimal = false; }
+
 void CLI(cpu_t *cpu) { cpu->SR.Interrupt = false; }
+
 void CLV(cpu_t *cpu) { cpu->SR.Overflow = false; }
 
 uint8_t CMP(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
-  if (cpu->AC >= memory[memAddr]) {
-    cpu->SR.Carry = true;
-  }
-  if (cpu->AC == memory[memAddr]) {
-    cpu->SR.Zero = true;
-  }
-  if (cpu->AC & BIT7) {
-    cpu->SR.Negative = true;
-  }
+  cpu->SR.Carry = cpu->AC >= memory[memAddr];
+  cpu->SR.Zero = cpu->AC == memory[memAddr];
+  cpu->SR.Negative = (cpu->AC - memory[memAddr]) & BIT7;
   uint8_t cycles = 0;
   cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
   return cycles;
 }
 
-uint8_t CMX(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+uint8_t CPX(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
-  if (cpu->X >= memory[memAddr]) {
-    cpu->SR.Carry = true;
-  }
-  if (cpu->X == memory[memAddr]) {
-    cpu->SR.Zero = true;
-  }
-  if (cpu->X & BIT7) {
-    cpu->SR.Negative = true;
-  }
+  uint8_t cycles = 0;
+  cpu->SR.Carry = cpu->X >= memory[memAddr];
+  cpu->SR.Zero = cpu->X == memory[memAddr];
+  cpu->SR.Negative = (cpu->X - memory[memAddr]) & BIT7;
+  cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
+  return cycles;
+}
+
+uint8_t CPY(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
+  cpu->SR.Carry = cpu->Y >= memory[memAddr];
+  cpu->SR.Zero = cpu->Y == memory[memAddr];
+  cpu->SR.Negative = (cpu->Y - memory[memAddr]) & BIT7;
   uint8_t cycles = 0;
   cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
   return cycles;
 }
 
-uint8_t CMY(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+void DEC(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
-  if (cpu->Y >= memory[memAddr]) {
-    cpu->SR.Carry = true;
-  }
-  if (cpu->Y == memory[memAddr]) {
-    cpu->SR.Zero = true;
-  }
-  if (cpu->X & BIT7) {
-    cpu->SR.Negative = true;
-  }
+  memory[memAddr] -= 1;
+  cpu->SR.Zero = memory[memAddr] == 0;
+  cpu->SR.Negative = memory[memAddr] & BIT7;
+}
+
+void DEX(cpu_t *cpu) {
+  cpu->X--;
+  cpu->SR.Zero = cpu->X == 0;
+  cpu->SR.Negative = cpu->X & BIT7;
+}
+
+void DEY(cpu_t *cpu) {
+  cpu->Y--;
+  cpu->SR.Zero = cpu->Y == 0;
+  cpu->SR.Negative = cpu->Y & BIT7;
+}
+
+uint8_t EOR(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
+  cpu->AC ^= memory[memAddr];
+  cpu->SR.Zero = cpu->AC == 0;
+  cpu->SR.Negative = cpu->AC & BIT7;
   uint8_t cycles = 0;
   cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
   return cycles;
 }
+
+void INC(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
+  memory[memAddr]++;
+  cpu->SR.Zero = memory[memAddr] == 0;
+  cpu->SR.Negative = memory[memAddr] & BIT7;
+}
+
+void INX(cpu_t *cpu) {
+  cpu->X++;
+  cpu->SR.Zero = cpu->X == 0;
+  cpu->SR.Negative = cpu->X & BIT7;
+}
+
+void INY(cpu_t *cpu) {
+  cpu->Y++;
+  cpu->SR.Zero = cpu->Y == 0;
+  cpu->SR.Negative = cpu->Y & BIT7;
+}
+
+void JMP(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  // subtract one for the later +1 in fn run
+  cpu->PC = fetchAddrMode(addr_mode, cpu, memory) - 1;
+}
+
+void JSR(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
+  uint16_t pc_to_push = cpu->PC;
+  memory[cpu->SP + 0x0100] = pc_to_push >> 8;
+  cpu->SP--;
+  memory[cpu->SP + 0x0100] = pc_to_push & 0xFF;
+  cpu->SP--;
+  cpu->PC = memAddr;
+  cpu->PC--;
+}
+
 // LDA - load Accumulator
 uint8_t LDA(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
   uint8_t cycles = 0;
   cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
   cpu->AC = memory[memAddr];
-  if (cpu->AC == 0) {
-    cpu->SR.Zero = true;
-  }
-  if (cpu->AC & BIT7) {
-    cpu->SR.Negative = true;
-  }
+  cpu->SR.Zero = cpu->AC == 0;
+  cpu->SR.Negative = cpu->AC & BIT7;
   return cycles;
 }
 
+uint8_t LDX(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
+  uint8_t cycles = 0;
+  cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
+  cpu->X = memory[memAddr];
+  cpu->SR.Zero = cpu->X == 0;
+  cpu->SR.Negative = cpu->X & BIT7;
+  return cycles;
+}
+
+uint8_t LDY(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
+  uint8_t cycles = 0;
+  cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
+  cpu->Y = memory[memAddr];
+  cpu->SR.Zero = cpu->Y == 0;
+  cpu->SR.Negative = cpu->Y & BIT7;
+  return cycles;
+}
+
+void LSR(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
+  uint8_t *ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &memory[memAddr];
+  cpu->SR.Carry = *ptr & BIT0;
+  *ptr >>= 1;
+  cpu->SR.Zero = *ptr == 0;
+  cpu->SR.Negative = *ptr & BIT7;
+}
+void NOP() { return; }
+
+uint8_t ORA(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
+  cpu->AC |= memory[memAddr];
+  cpu->SR.Zero = cpu->AC == 0;
+  cpu->SR.Negative = cpu->AC & BIT7;
+  uint8_t cycles = 0;
+  cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
+  return cycles;
+}
+
+void PHA(cpu_t *cpu, uint8_t *memory) {
+  memory[0x0100 + cpu->SP] = cpu->AC;
+  cpu->SP--;
+}
+
+void PHP(cpu_t *cpu, uint8_t *memory) {
+  cpu->SR.Break = true;
+  memory[0x0100 + cpu->SP] = combine_SR(cpu->SR);
+  cpu->SR.Break = false;
+  cpu->SP--;
+}
+
+void PLA(cpu_t *cpu, uint8_t *memory) {
+  cpu->SP++;
+  cpu->AC = memory[0x0100 + cpu->SP];
+  cpu->SR.Zero = cpu->AC == 0;
+  cpu->SR.Negative = cpu->AC & BIT7;
+}
+
+void PLP(cpu_t *cpu, uint8_t *memory) {
+  cpu->SP++;
+  // NOTICE: THIS CHANGES THE SR
+  expand_SR(cpu, memory[0x0100 + cpu->SP]);
+  cpu->SR.Break = false;
+}
+
+void ROL(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
+  uint8_t *ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &memory[memAddr];
+  uint8_t old_bit_7 = *ptr & BIT7;
+  *ptr = (*ptr << 1) + cpu->SR.Carry;
+  cpu->SR.Carry = old_bit_7;
+  cpu->SR.Zero = *ptr == 0;
+  cpu->SR.Negative = *ptr & BIT7;
+}
+
+void ROR(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
+  uint8_t *ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &memory[memAddr];
+  uint8_t old_bit_7 = *ptr & BIT0;
+  *ptr = (*ptr >> 1) + (cpu->SR.Carry << 7);
+  cpu->SR.Carry = old_bit_7 != 0;
+  cpu->SR.Zero = *ptr == 0;
+  cpu->SR.Negative = *ptr & BIT7;
+}
+
+void RTI(cpu_t *cpu, uint8_t *memory) {
+  cpu->SP++;
+  expand_SR(cpu, memory[0x0100 + cpu->SP]);
+  cpu->PC = ((uint16_t)memory[0x0100 + cpu->SP + 2] << 8) +
+            memory[0x0100 + cpu->SP + 1] - 1;
+  cpu->SP += 2;
+}
+
+void RTS(cpu_t *cpu, uint8_t *memory) {
+  cpu->PC = (((uint16_t)memory[0x0100 + cpu->SP + 2]) << 8) +
+            memory[0x0100 + cpu->SP + 1];
+  cpu->SP += 2;
+}
+uint8_t SBC(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
+  uint16_t mem = (uint16_t)memory[memAddr];
+  uint16_t AC = (uint16_t)cpu->AC;
+  uint16_t carry = (uint16_t)cpu->SR.Carry;
+  uint16_t added = AC - mem - (1 - carry);
+  uint8_t cycles = 0;
+  cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
+  cpu->AC = (uint8_t)added;
+  cpu->SR.Carry = !(added & 0xFF00);
+  // formula for determining overflow
+  // (result ^ M) & (result ^ mem) & BIT7
+  cpu->SR.Overflow = (AC ^ added) & (added ^ ~mem) & BIT7;
+  cpu->SR.Zero = cpu->AC == 0;
+  cpu->SR.Negative = (cpu->AC & BIT7);
+  return cycles;
+}
+
+void SEC(cpu_t *cpu) { cpu->SR.Carry = true; }
+
+void SED(cpu_t *cpu) { cpu->SR.Decimal = true; }
+
+void SEI(cpu_t *cpu) { cpu->SR.Interrupt = true; }
+
+void STA(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
+  memory[memAddr] = cpu->AC;
+}
+
+void STX(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
+  memory[memAddr] = cpu->X;
+}
+
+void STY(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
+  memory[memAddr] = cpu->Y;
+}
+
+void TAX(cpu_t *cpu) {
+  cpu->X = cpu->AC;
+  cpu->SR.Zero = cpu->X == 0;
+  cpu->SR.Negative = cpu->X & BIT7;
+}
+
+void TAY(cpu_t *cpu) {
+  cpu->Y = cpu->AC;
+  cpu->SR.Zero = cpu->Y == 0;
+  cpu->SR.Negative = cpu->Y & BIT7;
+}
+
+void TSX(cpu_t *cpu) {
+  cpu->X = cpu->SP;
+  cpu->SR.Zero = cpu->X == 0;
+  cpu->SR.Negative = cpu->X & BIT7;
+}
+
+void TXA(cpu_t *cpu) {
+  cpu->AC = cpu->X;
+  cpu->SR.Zero = cpu->AC == 0;
+  cpu->SR.Negative = cpu->AC & BIT7;
+}
+
+void TXS(cpu_t *cpu) { cpu->SP = cpu->X; }
+
+void TYA(cpu_t *cpu) {
+  cpu->AC = cpu->Y;
+  cpu->SR.Zero = cpu->AC == 0;
+  cpu->SR.Negative = cpu->AC & BIT7;
+}
 // gets the correct memory address to be used by the corresponding opcode
 // returns a 16 bit integer containing the propper memory address
-int run(cpu_t *cpu, uint8_t *memory) {
+void run(cpu_t *cpu, uint8_t *memory) {
   static instruction_t *instr;
+  uint8_t opcode;
+  char *name;
+  addressing_mode_t addr_mode;
+  uint8_t cycles;
+
   if (unlikely(instr == NULL))
     instr = create_opcodes();
-  uint8_t opcode = memory[cpu->PC];
-  char *name = instr[opcode].name;
-  addressing_mode_t addr_mode = instr[opcode].addr_mode;
-  uint8_t cycles = instr[opcode].cycles;
-  if (!strcmp(name, "LDA"))
-    cycles += LDA(addr_mode, cpu, memory);
-  else if (!strcmp(name, "ADC"))
+
+  opcode = memory[cpu->PC];
+  name = instr[opcode].name;
+  addr_mode = instr[opcode].addr_mode;
+  cycles = instr[opcode].cycles;
+
+  testCpuPart(*cpu, memory, instr[opcode]);
+
+  if (!strcmp(name, "ADC"))
     cycles += ADC(addr_mode, cpu, memory);
   else if (!strcmp(name, "AND"))
     cycles += AND(addr_mode, cpu, memory);
@@ -296,12 +511,85 @@ int run(cpu_t *cpu, uint8_t *memory) {
     CLV(cpu);
   else if (!strcmp(name, "CMP"))
     cycles += CMP(addr_mode, cpu, memory);
-  else if (!strcmp(name, "CMX"))
-    cycles += CMX(addr_mode, cpu, memory);
-  else if (!strcmp(name, "CMY"))
-    cycles += CMY(addr_mode, cpu, memory);
+  else if (!strcmp(name, "CPX"))
+    cycles += CPX(addr_mode, cpu, memory);
+  else if (!strcmp(name, "CPY"))
+    cycles += CPY(addr_mode, cpu, memory);
+  else if (!strcmp(name, "DEC"))
+    DEC(addr_mode, cpu, memory);
+  else if (!strcmp(name, "DEX"))
+    DEX(cpu);
+  else if (!strcmp(name, "DEY"))
+    DEY(cpu);
+  else if (!strcmp(name, "EOR"))
+    cycles += EOR(addr_mode, cpu, memory);
+  else if (!strcmp(name, "INC"))
+    INC(addr_mode, cpu, memory);
+  else if (!strcmp(name, "INX"))
+    INX(cpu);
+  else if (!strcmp(name, "INY"))
+    INY(cpu);
+  else if (!strcmp(name, "JMP"))
+    JMP(addr_mode, cpu, memory);
+  else if (!strcmp(name, "JSR"))
+    JSR(addr_mode, cpu, memory);
+  else if (!strcmp(name, "LDA"))
+    cycles += LDA(addr_mode, cpu, memory);
+  else if (!strcmp(name, "LDX"))
+    cycles += LDX(addr_mode, cpu, memory);
+  else if (!strcmp(name, "LDY"))
+    cycles += LDY(addr_mode, cpu, memory);
+  else if (!strcmp(name, "LSR"))
+    LSR(addr_mode, cpu, memory);
+  else if (!strcmp(name, "NOP"))
+    NOP();
+  else if (!strcmp(name, "ORA"))
+    cycles += ORA(addr_mode, cpu, memory);
+  else if (!strcmp(name, "PHA"))
+    PHA(cpu, memory);
+  else if (!strcmp(name, "PHP"))
+    PHP(cpu, memory);
+  else if (!strcmp(name, "PLA"))
+    PLA(cpu, memory);
+  else if (!strcmp(name, "PLP"))
+    PLP(cpu, memory);
+  else if (!strcmp(name, "ROL"))
+    ROL(addr_mode, cpu, memory);
+  else if (!strcmp(name, "ROR"))
+    ROR(addr_mode, cpu, memory);
+  else if (!strcmp(name, "RTI"))
+    RTI(cpu, memory);
+  else if (!strcmp(name, "RTS"))
+    RTS(cpu, memory);
+  else if (!strcmp(name, "SBC"))
+    cycles += SBC(addr_mode, cpu, memory);
+  else if (!strcmp(name, "SEC"))
+    SEC(cpu);
+  else if (!strcmp(name, "SED"))
+    SED(cpu);
+  else if (!strcmp(name, "SEI"))
+    SEI(cpu);
+  else if (!strcmp(name, "STA"))
+    STA(addr_mode, cpu, memory);
+  else if (!strcmp(name, "STX"))
+    STX(addr_mode, cpu, memory);
+  else if (!strcmp(name, "STY"))
+    STY(addr_mode, cpu, memory);
+  else if (!strcmp(name, "TAX"))
+    TAX(cpu);
+  else if (!strcmp(name, "TAY"))
+    TAY(cpu);
+  else if (!strcmp(name, "TSX"))
+    TSX(cpu);
+  else if (!strcmp(name, "TXA"))
+    TXA(cpu);
+  else if (!strcmp(name, "TXS"))
+    TXS(cpu);
+  else if (!strcmp(name, "TYA"))
+    TYA(cpu);
+
   cpu->PC++;
-  return cycles;
+  cpu->cycles += cycles;
 }
 
 bool hasPageCrossed(uint16_t addr1, uint16_t addr2) {
@@ -314,7 +602,8 @@ uint8_t pageCrossed(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory,
   case ABSOLUTEX:
     return 1 & hasPageCrossed(memAddr - cpu->X, memAddr);
     break;
-  case (ABSOLUTEY || INDIRECTY):
+  case ABSOLUTEY:
+  case INDIRECTY:
     return 1 & hasPageCrossed(memAddr - cpu->Y, memAddr);
     break;
   case RELATIVE:
@@ -382,18 +671,23 @@ uint16_t fetchAddrMode(addressing_mode_t addr_mode, cpu_t *cpu,
     cpu->PC += 2;
     break;
   }
-  case ABSOLUTEINDIRECT: {
+  case INDIRECT: {
     uint16_t memAccess =
         memory[cpu->PC + 1] + (((uint16_t)memory[cpu->PC + 2]) << 8);
     param = (((uint16_t)memory[memAccess + 1]) << 8) + memory[memAccess];
+    // handle the bug in the indirect vector goes to the same
+    // page when crossing the page boundry
+    if ((memAccess) == 0xFF) {
+      param = (((uint16_t)memory[memAccess & 0xFF00] << 8) + memory[memAccess]);
+    }
     cpu->PC += 2;
     break;
   }
   case INDIRECTX: {
     uint8_t memAccess = memory[cpu->PC + 1];
     cpu->PC += 1;
-    param = (((uint16_t)memory[memAccess + cpu->X + 1]) << 8) +
-            memory[memAccess + cpu->X];
+    param = (((uint16_t)memory[(memAccess + cpu->X + 1) & 0xFF]) << 8) +
+            memory[(memAccess + cpu->X) & 0xFF];
     break;
   }
   case INDIRECTY: {
@@ -419,16 +713,30 @@ uint8_t combine_SR(status_t SR) {
   uint8_t combine = 0;
   combine += SR.Negative << 7;
   combine += SR.Overflow << 6;
-  combine += 0 & BIT5;
+  combine += 0xFF & BIT5;
   combine += SR.Break << 4;
-  combine += SR.Interrupt << 3;
-  combine += SR.Zero << 2;
+  combine += SR.Decimal << 3;
+  combine += SR.Interrupt << 2;
+  combine += SR.Zero << 1;
   combine += SR.Carry;
   return combine;
 }
 
+void expand_SR(cpu_t *cpu, uint8_t SR) {
+  cpu->SR.Negative = SR & BIT7;
+  cpu->SR.Overflow = SR & BIT6;
+  cpu->SR.Break = SR & BIT4;
+  cpu->SR.Decimal = SR & BIT3;
+  cpu->SR.Interrupt = SR & BIT2;
+  cpu->SR.Zero = SR & BIT1;
+  cpu->SR.Carry = SR & BIT0;
+}
+
 instruction_t *create_opcodes() {
   static instruction_t instr[256];
+  for (int i = 0; i < 256; i++) {
+    instr[i] = (instruction_t){"XXX", 0, 0, 0};
+  }
   // ADC
   instr[0x69] = (instruction_t){"ADC", 0x69, IMMEDIATE, 2};
   instr[0x65] = (instruction_t){"ADC", 0x65, ZEROPAGE, 3};
@@ -472,8 +780,10 @@ instruction_t *create_opcodes() {
   instr[0x00] = (instruction_t){"BRK", 0x00, IMPLIED, 7};
   // BVC
   instr[0x50] = (instruction_t){"BVC", 0x50, RELATIVE, 2};
+  // BVS
+  instr[0x70] = (instruction_t){"BVS", 0x70, RELATIVE, 2};
   // CLC
-  instr[0x70] = (instruction_t){"CLC", 0x70, IMPLIED, 2};
+  instr[0x18] = (instruction_t){"CLC", 0x18, IMPLIED, 2};
   // CLD
   instr[0xD8] = (instruction_t){"CLD", 0xD8, IMPLIED, 2};
   // CLI
@@ -495,8 +805,8 @@ instruction_t *create_opcodes() {
   instr[0xEC] = (instruction_t){"CPX", 0xEC, ABSOLUTE, 4};
   // CPY
   instr[0xC0] = (instruction_t){"CPY", 0xC0, IMMEDIATE, 2};
-  instr[0xC4] = (instruction_t){"CPY", 0xC0, ZEROPAGE, 3};
-  instr[0xCC] = (instruction_t){"CPY", 0xC0, ABSOLUTE, 4};
+  instr[0xC4] = (instruction_t){"CPY", 0xC4, ZEROPAGE, 3};
+  instr[0xCC] = (instruction_t){"CPY", 0xCC, ABSOLUTE, 4};
   // DEC
   instr[0xC6] = (instruction_t){"DEC", 0xC6, ZEROPAGE, 5};
   instr[0xD6] = (instruction_t){"DEC", 0xD6, ZEROPAGEX, 6};

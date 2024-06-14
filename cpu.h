@@ -1,6 +1,10 @@
+#ifndef CPU_H
+#define CPU_H
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 typedef struct {
   bool Negative;
@@ -19,6 +23,7 @@ typedef struct {
   uint8_t SP;  // stack pointer from $0100 to $01FF
   status_t SR; // status register
   uint16_t PC; // Program Counter
+  int cycles;
 } cpu_t;
 
 typedef enum {
@@ -31,7 +36,6 @@ typedef enum {
   ABSOLUTE,
   ABSOLUTEX,
   ABSOLUTEY,
-  ABSOLUTEINDIRECT,
   INDIRECT,
   INDIRECTX,
   INDIRECTY,
@@ -49,14 +53,18 @@ typedef enum {
   BIT7 = 0b10000000,
 } bitmasks8_t;
 
-int run(cpu_t *cpu, uint8_t *memory);
-
 typedef struct {
   char name[4];
   uint8_t opcode;
   addressing_mode_t addr_mode;
   uint8_t cycles;
 } instruction_t;
+
+
+void run(cpu_t *cpu, uint8_t *memory);
+uint8_t combine_SR(status_t SR);
+void expand_SR(cpu_t *cpu, uint8_t);
+
 // Status reguster bit 7 to 0
 //
 // N .... Negative
@@ -77,3 +85,5 @@ typedef struct {
 //  0xFFFA 0xFFFB ... NMI (Non-maskable Interrupt)
 //  0xFFFC 0xFFFD ... RES (Reset)
 //  0xFFFE 0xFFFF ... IRQ (Interupt Request)
+//
+#endif

@@ -1,5 +1,39 @@
 #include "test.h"
+#include "cpu.h"
 #include <stdbool.h>
+#include <stdint.h>
+
+void testCpuPart(const cpu_t cpu, const uint8_t *memory,
+                 const instruction_t instr) {
+  printf("%04X  ", cpu.PC & 0xFFFF);
+  printf("%02X ", memory[cpu.PC] & 0xFF);
+  switch (instr.addr_mode) {
+  case IMPLIED:
+  case ACCUMULATOR:
+    printf("     ");
+    break;
+  case IMMEDIATE:
+  case ZEROPAGE:
+  case ZEROPAGEX:
+  case INDIRECTX:
+  case INDIRECTY:
+  case ZEROPAGEY:
+  case RELATIVE:
+    printf("%02X   ", memory[cpu.PC + 1] & 0xFF);
+    break;
+  case ABSOLUTE:
+  case ABSOLUTEX:
+  case ABSOLUTEY:
+  case INDIRECT:
+    printf("%02X %02X", memory[cpu.PC + 1] & 0xFF, memory[cpu.PC + 2] & 0xFF);
+    break;
+  }
+  printf("  ");
+  printf("%s ", instr.name);
+  printf("A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%d\n", cpu.AC, cpu.X, cpu.Y,
+         combine_SR(cpu.SR), cpu.SP, cpu.cycles);
+}
+
 bool test_LDA_one_immediate(emulator_t emu) {
   emu.memory[0x8000] = 0xA9;
   emu.memory[0x8001] = 0x01;
