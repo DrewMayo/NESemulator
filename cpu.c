@@ -1,3 +1,12 @@
+// TODO
+//
+// 1) Add unoffical opcodes
+// 2) test unofficial opcodes
+// 3) test against other cpu tests
+// 4) clean up code to consistant stycle
+// 5) constify the code
+// 6) use less strcmp
+
 #include "cpu.h"
 #include "test.h"
 #include <stdint.h>
@@ -45,8 +54,8 @@ void ASL(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
   uint8_t *ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &memory[memAddr];
   cpu->SR.Carry = *ptr & BIT7;
-  *ptr <<= 1;
-  cpu->SR.Zero = cpu->AC == 0;
+  *ptr *= 2;
+  cpu->SR.Zero = *ptr == 0;
   cpu->SR.Negative = *ptr & BIT7;
 }
 
@@ -54,9 +63,9 @@ uint8_t BCC(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
   uint8_t cycles = 0;
   if (cpu->SR.Carry == false) {
-    cpu->PC = memAddr + 1;
     // plus one cycle if page crosssed
     cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
+    cpu->PC = memAddr;
     // on sucess add one cycles
     cycles += 1;
   }
@@ -67,9 +76,9 @@ uint8_t BCS(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
   uint8_t cycles = 0;
   if (cpu->SR.Carry == true) {
-    cpu->PC = memAddr + 1;
     // plus one cycle if page crosssed
     cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
+    cpu->PC = memAddr;
     // on sucess add one cycles
     cycles += 1;
   }
@@ -79,9 +88,9 @@ uint8_t BEQ(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
   uint8_t cycles = 0;
   if (cpu->SR.Zero == true) {
-    cpu->PC = memAddr + 1;
     // plus one cycle if page crosssed
     cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
+    cpu->PC = memAddr;
     // on sucess add one cycles
     cycles += 1;
   }
@@ -101,9 +110,9 @@ uint8_t BMI(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
   uint8_t cycles = 0;
   if (cpu->SR.Negative == true) {
-    cpu->PC = memAddr + 1;
     // plus one cycle if page crosssed
     cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
+    cpu->PC = memAddr;
     // on sucess add one cycles
     cycles += 1;
   }
@@ -114,9 +123,9 @@ uint8_t BNE(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
   uint8_t cycles = 0;
   if (cpu->SR.Zero == false) {
-    cpu->PC = memAddr + 1;
     // plus one cycle if page crosssed
     cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
+    cpu->PC = memAddr;
     // on sucess add one cycles
     cycles += 1;
   }
@@ -127,9 +136,9 @@ uint8_t BPL(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
   uint8_t cycles = 0;
   if (cpu->SR.Negative == false) {
-    cpu->PC = memAddr + 1;
     // plus one cycle if page crosssed
     cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
+    cpu->PC = memAddr;
     // on sucess add one cycles
     cycles += 1;
   }
@@ -152,9 +161,9 @@ uint8_t BVC(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
   uint8_t cycles = 0;
   if (cpu->SR.Overflow == false) {
-    cpu->PC = memAddr + 1;
     // plus one cycle if page crosssed
     cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
+    cpu->PC = memAddr;
     // on sucess add one cycles
     cycles += 1;
   }
@@ -165,9 +174,9 @@ uint8_t BVS(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
   uint8_t cycles = 0;
   if (cpu->SR.Overflow == true) {
-    cpu->PC = memAddr + 1;
     // plus one cycle if page crosssed
     cycles += pageCrossed(addr_mode, cpu, memory, memAddr);
+    cpu->PC = memAddr;
     // on sucess add one cycles
     cycles += 1;
   }
@@ -315,11 +324,17 @@ void LSR(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   cpu->SR.Zero = *ptr == 0;
   cpu->SR.Negative = *ptr & BIT7;
 }
-void NOP() { return; }
+uint8_t NOP(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t mem_addr = fetchAddrMode(addr_mode, cpu, memory);
+  if (addr_mode == ABSOLUTEX) {
+    return pageCrossed(addr_mode, cpu, memory, mem_addr);
+  }
+  return 0;
+}
 
 uint8_t ORA(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
-  cpu->AC |= memory[memAddr];
+  cpu->AC = cpu->AC | memory[memAddr];
   cpu->SR.Zero = cpu->AC == 0;
   cpu->SR.Negative = cpu->AC & BIT7;
   uint8_t cycles = 0;
@@ -386,6 +401,7 @@ void RTS(cpu_t *cpu, uint8_t *memory) {
             memory[0x0100 + cpu->SP + 1];
   cpu->SP += 2;
 }
+
 uint8_t SBC(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
   uint16_t memAddr = fetchAddrMode(addr_mode, cpu, memory);
   uint16_t mem = (uint16_t)memory[memAddr];
@@ -456,6 +472,99 @@ void TYA(cpu_t *cpu) {
   cpu->SR.Zero = cpu->AC == 0;
   cpu->SR.Negative = cpu->AC & BIT7;
 }
+
+// UNOFFICIAL OPCODES
+
+uint8_t LAX(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t mem_addr = fetchAddrMode(addr_mode, cpu, memory);
+  cpu->AC = memory[mem_addr];
+  cpu->X = cpu->AC;
+  cpu->SR.Zero = cpu->X == 0;
+  cpu->SR.Negative = cpu->X & BIT7;
+  return pageCrossed(addr_mode, cpu, memory, mem_addr);
+}
+
+void SAX(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t mem_addr = fetchAddrMode(addr_mode, cpu, memory);
+  memory[mem_addr] = cpu->AC & cpu->X;
+}
+
+void DCP(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t mem_addr = fetchAddrMode(addr_mode, cpu, memory);
+  memory[mem_addr]--;
+  cpu->SR.Carry = cpu->AC >= memory[mem_addr];
+  cpu->SR.Zero = cpu->AC == memory[mem_addr];
+  cpu->SR.Negative = (cpu->AC - memory[mem_addr]) & BIT7;
+}
+
+void ISB(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t mem_addr = fetchAddrMode(addr_mode, cpu, memory);
+  memory[mem_addr]++;
+  uint16_t mem = (uint16_t)memory[mem_addr];
+  uint16_t AC = (uint16_t)cpu->AC;
+  uint16_t carry = (uint16_t)cpu->SR.Carry;
+  uint16_t added = AC - mem - (1 - carry);
+  cpu->AC = (uint8_t)added;
+  cpu->SR.Carry = !(added & 0xFF00);
+  // formula for determining overflow
+  // (result ^ M) & (result ^ mem) & BIT7
+  cpu->SR.Overflow = (AC ^ added) & (added ^ ~mem) & BIT7;
+  cpu->SR.Zero = cpu->AC == 0;
+  cpu->SR.Negative = (cpu->AC & BIT7);
+}
+
+void RLA(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t mem_addr = fetchAddrMode(addr_mode, cpu, memory);
+  uint8_t *ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &memory[mem_addr];
+  bool old_carry_bit = *ptr & BIT7;
+  *ptr = (*ptr << 1) + cpu->SR.Carry;
+  cpu->AC = cpu->AC & memory[mem_addr];
+  cpu->SR.Carry = old_carry_bit;
+  cpu->SR.Zero = cpu->AC == 0;
+  cpu->SR.Negative = (cpu->AC & BIT7);
+}
+
+void RRA(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t mem_addr = fetchAddrMode(addr_mode, cpu, memory);
+  uint8_t *ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &memory[mem_addr];
+  uint8_t old_bit_7 = *ptr & BIT0;
+  *ptr = (*ptr >> 1) + (cpu->SR.Carry << 7);
+  cpu->SR.Carry = old_bit_7 != 0;
+  uint16_t mem = (uint16_t)memory[mem_addr];
+  uint16_t AC = (uint16_t)cpu->AC;
+  uint16_t carry = (uint16_t)cpu->SR.Carry;
+  uint16_t added = mem + AC + carry;
+  uint8_t cycles = 0;
+  cycles += pageCrossed(addr_mode, cpu, memory, mem_addr);
+  cpu->AC = (uint8_t)added;
+  cpu->SR.Carry = (added > 255);
+  // formula for determining overflow
+  // (result ^ M) & (result ^ mem) & BIT7
+  cpu->SR.Overflow = (AC ^ added) & (added ^ mem) & BIT7;
+  cpu->SR.Zero = (cpu->AC == 0);
+  cpu->SR.Negative = (cpu->AC & BIT7);
+}
+
+void SLO(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t mem_addr = fetchAddrMode(addr_mode, cpu, memory);
+  uint8_t *ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &memory[mem_addr];
+  cpu->SR.Carry = *ptr & BIT7;
+  *ptr *= 2;
+  cpu->AC = cpu->AC | memory[mem_addr];
+  cpu->SR.Zero = cpu->AC == 0;
+  cpu->SR.Negative = (cpu->AC & BIT7);
+}
+
+void SRE(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory) {
+  uint16_t mem_addr = fetchAddrMode(addr_mode, cpu, memory);
+  uint8_t *ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &memory[mem_addr];
+  cpu->SR.Carry = *ptr & BIT0;
+  *ptr >>= 1;
+  cpu->AC = cpu->AC ^ memory[mem_addr];
+  cpu->SR.Zero = cpu->AC == 0;
+  cpu->SR.Negative = (cpu->AC & BIT7);
+}
+
 // gets the correct memory address to be used by the corresponding opcode
 // returns a 16 bit integer containing the propper memory address
 void run(cpu_t *cpu, uint8_t *memory) {
@@ -474,7 +583,6 @@ void run(cpu_t *cpu, uint8_t *memory) {
   cycles = instr[opcode].cycles;
 
   testCpuPart(*cpu, memory, instr[opcode]);
-
   if (!strcmp(name, "ADC"))
     cycles += ADC(addr_mode, cpu, memory);
   else if (!strcmp(name, "AND"))
@@ -542,7 +650,7 @@ void run(cpu_t *cpu, uint8_t *memory) {
   else if (!strcmp(name, "LSR"))
     LSR(addr_mode, cpu, memory);
   else if (!strcmp(name, "NOP"))
-    NOP();
+    cycles += NOP(addr_mode, cpu, memory);
   else if (!strcmp(name, "ORA"))
     cycles += ORA(addr_mode, cpu, memory);
   else if (!strcmp(name, "PHA"))
@@ -587,6 +695,22 @@ void run(cpu_t *cpu, uint8_t *memory) {
     TXS(cpu);
   else if (!strcmp(name, "TYA"))
     TYA(cpu);
+  else if (!strcmp(name, "LAX"))
+    cycles += LAX(addr_mode, cpu, memory);
+  else if (!strcmp(name, "SAX"))
+    SAX(addr_mode, cpu, memory);
+  else if (!strcmp(name, "DCP"))
+    DCP(addr_mode, cpu, memory);
+  else if (!strcmp(name, "ISB"))
+    ISB(addr_mode, cpu, memory);
+  else if (!strcmp(name, "RLA"))
+    RLA(addr_mode, cpu, memory);
+  else if (!strcmp(name, "RRA"))
+    RRA(addr_mode, cpu, memory);
+  else if (!strcmp(name, "SLO"))
+    SLO(addr_mode, cpu, memory);
+  else if (!strcmp(name, "SRE"))
+    SRE(addr_mode, cpu, memory);
 
   cpu->PC++;
   cpu->cycles += cycles;
@@ -607,7 +731,13 @@ uint8_t pageCrossed(addressing_mode_t addr_mode, cpu_t *cpu, uint8_t *memory,
     return 1 & hasPageCrossed(memAddr - cpu->Y, memAddr);
     break;
   case RELATIVE:
-    return 1 & hasPageCrossed(memAddr, memAddr - memory[cpu->PC]);
+    memAddr += 1;
+    if (memory[cpu->PC] < 128) {
+      return 1 & hasPageCrossed(memAddr, memAddr - (uint16_t)memory[cpu->PC]);
+    } else {
+      return 1 &
+             hasPageCrossed(memAddr, memAddr + (uint8_t)(~memory[cpu->PC] + 1));
+    }
     break;
   default:
     return 0;
@@ -677,7 +807,7 @@ uint16_t fetchAddrMode(addressing_mode_t addr_mode, cpu_t *cpu,
     param = (((uint16_t)memory[memAccess + 1]) << 8) + memory[memAccess];
     // handle the bug in the indirect vector goes to the same
     // page when crossing the page boundry
-    if ((memAccess) == 0xFF) {
+    if (((memAccess) & 0xFF) == 0xFF) {
       param = (((uint16_t)memory[memAccess & 0xFF00] << 8) + memory[memAccess]);
     }
     cpu->PC += 2;
@@ -693,12 +823,16 @@ uint16_t fetchAddrMode(addressing_mode_t addr_mode, cpu_t *cpu,
   case INDIRECTY: {
     uint8_t memAccess = memory[cpu->PC + 1];
     cpu->PC += 1;
-    param = (((uint16_t)memory[memAccess + 1]) << 8) +
-            (uint16_t)memory[memAccess] + (uint16_t)cpu->Y;
+    param = (((uint16_t)memory[(memAccess + 1) & 0xFF]) << 8) +
+            ((uint16_t)memory[memAccess & 0xFF]) + (uint16_t)cpu->Y;
     break;
   }
   case RELATIVE: {
-    param = cpu->PC + memory[cpu->PC + 1];
+    int8_t add = memory[cpu->PC + 1];
+    if (memory[cpu->PC + 1] > 0x7F) {
+      add = -1 * ~(memory[cpu->PC + 1]) - 1;
+    }
+    param = cpu->PC + add + 1;
     cpu->PC += 1;
     break;
   }
@@ -769,7 +903,7 @@ instruction_t *create_opcodes() {
   instr[0xF0] = (instruction_t){"BEQ", 0xF0, RELATIVE, 2};
   // BIT
   instr[0x24] = (instruction_t){"BIT", 0x24, ZEROPAGE, 3};
-  instr[0x2C] = (instruction_t){"BIT", 0x2C, ZEROPAGEX, 4};
+  instr[0x2C] = (instruction_t){"BIT", 0x2C, ABSOLUTE, 4};
   // BMI
   instr[0x30] = (instruction_t){"BMI", 0x30, RELATIVE, 2};
   // BNE
@@ -823,8 +957,8 @@ instruction_t *create_opcodes() {
   instr[0x4D] = (instruction_t){"EOR", 0x4D, ABSOLUTE, 4};
   instr[0x5D] = (instruction_t){"EOR", 0x5D, ABSOLUTEX, 4};
   instr[0x59] = (instruction_t){"EOR", 0x59, ABSOLUTEY, 4};
-  instr[0x41] = (instruction_t){"EOR", 0x59, ABSOLUTEY, 6};
-  instr[0x51] = (instruction_t){"EOR", 0x59, ABSOLUTEY, 5};
+  instr[0x41] = (instruction_t){"EOR", 0x59, INDIRECTX, 6};
+  instr[0x51] = (instruction_t){"EOR", 0x59, INDIRECTY, 5};
   // INC
   instr[0xE6] = (instruction_t){"INC", 0xE6, ZEROPAGE, 5};
   instr[0xF6] = (instruction_t){"INC", 0xF6, ZEROPAGEX, 6};
@@ -870,13 +1004,13 @@ instruction_t *create_opcodes() {
   instr[0xEA] = (instruction_t){"NOP", 0xEA, IMPLIED, 2};
   // ORA
   instr[0x09] = (instruction_t){"ORA", 0x09, IMMEDIATE, 2};
-  instr[0x05] = (instruction_t){"ORA", 0x09, IMMEDIATE, 3};
-  instr[0x15] = (instruction_t){"ORA", 0x09, IMMEDIATE, 4};
-  instr[0x0D] = (instruction_t){"ORA", 0x09, IMMEDIATE, 4};
-  instr[0x1D] = (instruction_t){"ORA", 0x09, IMMEDIATE, 4};
-  instr[0x19] = (instruction_t){"ORA", 0x09, IMMEDIATE, 4};
-  instr[0x01] = (instruction_t){"ORA", 0x09, IMMEDIATE, 6};
-  instr[0x11] = (instruction_t){"ORA", 0x09, IMMEDIATE, 5};
+  instr[0x05] = (instruction_t){"ORA", 0x05, ZEROPAGE, 3};
+  instr[0x15] = (instruction_t){"ORA", 0x15, ZEROPAGEX, 4};
+  instr[0x0D] = (instruction_t){"ORA", 0x0D, ABSOLUTE, 4};
+  instr[0x1D] = (instruction_t){"ORA", 0x1D, ABSOLUTEX, 4};
+  instr[0x19] = (instruction_t){"ORA", 0x19, ABSOLUTEY, 4};
+  instr[0x01] = (instruction_t){"ORA", 0x01, INDIRECTX, 6};
+  instr[0x11] = (instruction_t){"ORA", 0x11, INDIRECTY, 5};
   // PHA
   instr[0x48] = (instruction_t){"PHA", 0x48, IMPLIED, 3};
   // PHP
@@ -944,5 +1078,97 @@ instruction_t *create_opcodes() {
   instr[0x9A] = (instruction_t){"TXS", 0x9A, IMPLIED, 2};
   // TYA
   instr[0x98] = (instruction_t){"TYA", 0x98, IMPLIED, 2};
+  // UNOFFICIAL OPCODES
+  // LAX
+  instr[0xA7] = (instruction_t){"LAX", 0xA7, ZEROPAGE, 3};
+  instr[0xB7] = (instruction_t){"LAX", 0xB7, ZEROPAGEY, 4};
+  instr[0xA3] = (instruction_t){"LAX", 0xA3, INDIRECTX, 6};
+  instr[0xB3] = (instruction_t){"LAX", 0xB3, INDIRECTY, 5};
+  instr[0xAF] = (instruction_t){"LAX", 0xAF, ABSOLUTE, 4};
+  instr[0xBF] = (instruction_t){"LAX", 0xBF, ABSOLUTEY, 4};
+  // SAX
+  instr[0x87] = (instruction_t){"SAX", 0x87, ZEROPAGE, 3};
+  instr[0x97] = (instruction_t){"SAX", 0x97, ZEROPAGEY, 4};
+  instr[0x83] = (instruction_t){"SAX", 0x83, INDIRECTX, 6};
+  instr[0x8F] = (instruction_t){"SAX", 0x8F, ABSOLUTE, 4};
+  // DCP
+  instr[0xC3] = (instruction_t){"DCP", 0xC3, INDIRECTX, 8};
+  instr[0xC7] = (instruction_t){"DCP", 0xC7, ZEROPAGE, 5};
+  instr[0xCF] = (instruction_t){"DCP", 0xCF, ABSOLUTE, 6};
+  instr[0xD3] = (instruction_t){"DCP", 0xD3, INDIRECTY, 8};
+  instr[0xD7] = (instruction_t){"DCP", 0xD3, ZEROPAGEX, 6};
+  instr[0xDB] = (instruction_t){"DCP", 0xDB, ABSOLUTEY, 7};
+  instr[0xDF] = (instruction_t){"DCP", 0xDB, ABSOLUTEX, 7};
+  // ISB
+  instr[0xE3] = (instruction_t){"ISB", 0xE3, INDIRECTX, 8};
+  instr[0xE7] = (instruction_t){"ISB", 0xE7, ZEROPAGE, 5};
+  instr[0xEF] = (instruction_t){"ISB", 0xEF, ABSOLUTE, 6};
+  instr[0xF3] = (instruction_t){"ISB", 0xF3, INDIRECTY, 8};
+  instr[0xF7] = (instruction_t){"ISB", 0xF7, ZEROPAGEX, 6};
+  instr[0xFB] = (instruction_t){"ISB", 0xFB, ABSOLUTEY, 7};
+  instr[0xFF] = (instruction_t){"ISB", 0xFF, ABSOLUTEX, 7};
+  // RLA
+  instr[0x23] = (instruction_t){"RLA", 0x23, INDIRECTX, 8};
+  instr[0x27] = (instruction_t){"RLA", 0x27, ZEROPAGE, 5};
+  instr[0x2F] = (instruction_t){"RLA", 0x2F, ABSOLUTE, 6};
+  instr[0x33] = (instruction_t){"RLA", 0x33, INDIRECTY, 8};
+  instr[0x37] = (instruction_t){"RLA", 0x37, ZEROPAGEX, 6};
+  instr[0x3B] = (instruction_t){"RLA", 0x3B, ABSOLUTEY, 7};
+  instr[0x3F] = (instruction_t){"RLA", 0x3F, ABSOLUTEX, 7};
+  // RRA
+  instr[0x63] = (instruction_t){"RRA", 0x63, INDIRECTX, 8};
+  instr[0x67] = (instruction_t){"RRA", 0x67, ZEROPAGE, 5};
+  instr[0x6F] = (instruction_t){"RRA", 0x6F, ABSOLUTE, 6};
+  instr[0x73] = (instruction_t){"RRA", 0x73, INDIRECTY, 8};
+  instr[0x77] = (instruction_t){"RRA", 0x77, ZEROPAGEX, 6};
+  instr[0x7B] = (instruction_t){"RRA", 0x7B, ABSOLUTEY, 7};
+  instr[0x7F] = (instruction_t){"RRA", 0x7F, ABSOLUTEX, 7};
+  // SLO
+  instr[0x03] = (instruction_t){"SLO", 0x03, INDIRECTX, 8};
+  instr[0x07] = (instruction_t){"SLO", 0x07, ZEROPAGE, 5};
+  instr[0x0F] = (instruction_t){"SLO", 0x0F, ABSOLUTE, 6};
+  instr[0x13] = (instruction_t){"SLO", 0x13, INDIRECTY, 8};
+  instr[0x17] = (instruction_t){"SLO", 0x17, ZEROPAGEX, 6};
+  instr[0x1B] = (instruction_t){"SLO", 0x1B, ABSOLUTEY, 7};
+  instr[0x1F] = (instruction_t){"SLO", 0x1F, ABSOLUTEX, 7};
+
+  // SRE
+  instr[0x43] = (instruction_t){"SRE", 0x43, INDIRECTX, 8};
+  instr[0x47] = (instruction_t){"SRE", 0x47, ZEROPAGE, 5};
+  instr[0x4F] = (instruction_t){"SRE", 0x4F, ABSOLUTE, 6};
+  instr[0x53] = (instruction_t){"SRE", 0x53, INDIRECTY, 8};
+  instr[0x57] = (instruction_t){"SRE", 0x57, ZEROPAGEX, 6};
+  instr[0x5B] = (instruction_t){"SRE", 0x5B, ABSOLUTEY, 7};
+  instr[0x5F] = (instruction_t){"SRE", 0x5F, ABSOLUTEX, 7};
+  // NOP
+  instr[0x1A] = (instruction_t){"NOP", 0x1A, IMPLIED, 2};
+  instr[0x3A] = (instruction_t){"NOP", 0x3A, IMPLIED, 2};
+  instr[0x5A] = (instruction_t){"NOP", 0x5A, IMPLIED, 2};
+  instr[0x7A] = (instruction_t){"NOP", 0x7A, IMPLIED, 2};
+  instr[0xDA] = (instruction_t){"NOP", 0xDA, IMPLIED, 2};
+  instr[0xFA] = (instruction_t){"NOP", 0xFA, IMPLIED, 2};
+  // OTHER NOPS -- EG IGN
+  instr[0x0C] = (instruction_t){"NOP", 0x0C, ABSOLUTE, 4};
+  instr[0x1C] = (instruction_t){"NOP", 0x1C, ABSOLUTEX, 4};
+  instr[0x3C] = (instruction_t){"NOP", 0x3C, ABSOLUTEX, 4};
+  instr[0x5C] = (instruction_t){"NOP", 0x5C, ABSOLUTEX, 4};
+  instr[0x7C] = (instruction_t){"NOP", 0x7C, ABSOLUTEX, 4};
+  instr[0xDC] = (instruction_t){"NOP", 0xDC, ABSOLUTEX, 4};
+  instr[0xFC] = (instruction_t){"NOP", 0xFC, ABSOLUTEX, 4};
+  instr[0x04] = (instruction_t){"NOP", 0x04, ZEROPAGE, 3};
+  instr[0x44] = (instruction_t){"NOP", 0x44, ZEROPAGE, 3};
+  instr[0x64] = (instruction_t){"NOP", 0x64, ZEROPAGE, 3};
+  instr[0x14] = (instruction_t){"NOP", 0x14, ZEROPAGEX, 4};
+  instr[0x34] = (instruction_t){"NOP", 0x34, ZEROPAGEX, 4};
+  instr[0x54] = (instruction_t){"NOP", 0x54, ZEROPAGEX, 4};
+  instr[0x74] = (instruction_t){"NOP", 0x74, ZEROPAGEX, 4};
+  instr[0xD4] = (instruction_t){"NOP", 0xD4, ZEROPAGEX, 4};
+  instr[0xF4] = (instruction_t){"NOP", 0xF4, ZEROPAGEX, 4};
+  // more NOPS
+  instr[0x80] = (instruction_t){"NOP", 0x80, IMMEDIATE, 2};
+  instr[0x82] = (instruction_t){"NOP", 0x82, IMMEDIATE, 2};
+  instr[0x82] = (instruction_t){"NOP", 0x89, IMMEDIATE, 2};
+  // SBC -- unofficial
+  instr[0xEB] = (instruction_t){"SBC", 0xEB, IMMEDIATE, 2};
   return instr;
 }
