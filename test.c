@@ -3,8 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-void testCpuPart(const cpu_t cpu, const uint8_t *memory,
-                 const instruction_t instr) {
+void testCpuPart(const struct cpu_6502 cpu, const uint8_t *memory, const struct instruction instr) {
   printf("%04X  ", cpu.PC & 0xFFFF);
   printf("%02X ", memory[cpu.PC] & 0xFF);
   switch (instr.addr_mode) {
@@ -30,8 +29,7 @@ void testCpuPart(const cpu_t cpu, const uint8_t *memory,
   }
   printf("  ");
   printf("%s ", instr.name);
-  printf("A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%d\n", cpu.AC, cpu.X, cpu.Y,
-         combine_SR(cpu.SR), cpu.SP, cpu.cycles);
+  printf("A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%d\n", cpu.AC, cpu.X, cpu.Y, combine_SR(cpu.SR), cpu.SP, cpu.cycles);
 }
 
 bool test_LDA_one_immediate(emulator_t emu) {

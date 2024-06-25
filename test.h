@@ -7,6 +7,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 int run_unit_tests();
-void testCpuPart(const cpu_t cpu, const uint8_t *memory, const instruction_t instr);
+void testCpuPart(const struct cpu_6502 cpu, const uint8_t *memory, const struct instruction instr);
 
 #endif

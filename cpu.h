@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
-typedef struct {
+struct status_reg {
   bool Negative;
   bool Overflow;
   bool Break;
@@ -14,19 +14,19 @@ typedef struct {
   bool Interrupt;
   bool Zero;
   bool Carry;
-} status_t;
+};
 
-typedef struct {
-  uint8_t AC;  // Accumulator Register
-  uint8_t X;   // X register
-  uint8_t Y;   // Y register
-  uint8_t SP;  // stack pointer from $0100 to $01FF
-  status_t SR; // status register
-  uint16_t PC; // Program Counter
+struct cpu_6502 {
+  uint8_t AC;           // Accumulator Register
+  uint8_t X;            // X register
+  uint8_t Y;            // Y register 
+  uint8_t SP;           // stack pointer from $0100 to $01FF
+  struct status_reg SR; // status register
+  uint16_t PC;          // Program Counter
   int cycles;
-} cpu_t;
+};
 
-typedef enum {
+enum addr_mode_states {
   IMPLIED,
   ACCUMULATOR,
   IMMEDIATE,
@@ -40,7 +40,7 @@ typedef enum {
   INDIRECTX,
   INDIRECTY,
   RELATIVE,
-} addressing_mode_t;
+};
 
 typedef enum {
   BIT0 = 0b00000001,
@@ -53,17 +53,16 @@ typedef enum {
   BIT7 = 0b10000000,
 } bitmasks8_t;
 
-typedef struct {
+struct instruction {
   char name[4];
-  uint8_t opcode;
-  addressing_mode_t addr_mode;
+  enum addr_mode_states addr_mode;
   uint8_t cycles;
-} instruction_t;
+  uint8_t (*fp_instruction)(const enum addr_mode_states, struct cpu_6502 *, uint8_t *);
+};
 
-
-void run(cpu_t *cpu, uint8_t *memory);
-uint8_t combine_SR(status_t SR);
-void expand_SR(cpu_t *cpu, uint8_t);
+void run(struct cpu_6502 *cpu, uint8_t *memory);
+uint8_t combine_SR(const struct status_reg SR);
+void expand_SR(struct cpu_6502 *cpu, const uint8_t SR);
 
 // Status reguster bit 7 to 0
 //

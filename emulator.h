@@ -9,6 +9,6 @@
 #define ANSI_COLOR_RESET   "\x1b[0m"
 
 typedef struct {
-  cpu_t cpu;
+  struct cpu_6502 cpu;
   uint8_t memory[RAMSIZE];
 } emulator_t;
