@@ -19,11 +19,12 @@ struct status_reg {
 struct cpu_6502 {
   uint8_t AC;           // Accumulator Register
   uint8_t X;            // X register
-  uint8_t Y;            // Y register 
+  uint8_t Y;            // Y register
   uint8_t SP;           // stack pointer from $0100 to $01FF
   struct status_reg SR; // status register
   uint16_t PC;          // Program Counter
   int cycles;
+  uint8_t memory[65536];
 };
 
 enum addr_mode_states {
@@ -42,27 +43,16 @@ enum addr_mode_states {
   RELATIVE,
 };
 
-typedef enum {
-  BIT0 = 0b00000001,
-  BIT1 = 0b00000010,
-  BIT2 = 0b00000100,
-  BIT3 = 0b00001000,
-  BIT4 = 0b00010000,
-  BIT5 = 0b00100000,
-  BIT6 = 0b01000000,
-  BIT7 = 0b10000000,
-} bitmasks8_t;
-
 struct instruction {
   char name[4];
   enum addr_mode_states addr_mode;
   uint8_t cycles;
-  uint8_t (*fp_instruction)(const enum addr_mode_states, struct cpu_6502 *, uint8_t *);
+  uint8_t (*fp_instruction)(const enum addr_mode_states, struct cpu_6502 *);
 };
 
-void run(struct cpu_6502 *cpu, uint8_t *memory);
-uint8_t combine_SR(const struct status_reg SR);
-void expand_SR(struct cpu_6502 *cpu, const uint8_t SR);
+void cpu_run(struct cpu_6502 *cpu);
+uint8_t cpu_combine_SR(const struct status_reg SR);
+void cpu_expand_SR(struct cpu_6502 *cpu, const uint8_t SR);
 
 // Status reguster bit 7 to 0
 //

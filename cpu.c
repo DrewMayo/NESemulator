@@ -1,39 +1,41 @@
 #include "cpu.h"
+#include "bitmask.h"
 #include "test.h"
+#include <stdint.h>
+
 #define unlikely(x) __builtin_expect(!!(x), 0)
 #define likely(x) __builtin_expect(!!(x), 1)
 
-uint8_t combine_SR(struct status_reg SR);
-void expand_SR(struct cpu_6502 *cpu, uint8_t SR);
-uint8_t page_crossed(const enum addr_mode_states addr_mode, const struct cpu_6502 *cpu, const uint8_t *memory, uint16_t mem_addr);
-uint16_t fetch_addr_mode(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, const uint8_t *memory);
-
+uint8_t cpu_combine_SR(struct status_reg SR);
+void cpu_expand_SR(struct cpu_6502 *cpu, uint8_t SR);
+uint8_t page_crossed(const enum addr_mode_states addr_mode, const struct cpu_6502 *cpu, uint16_t mem_addr);
+uint16_t fetch_addr_mode(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu);
 struct instruction *create_opcodes();
+
 // This is the main tick of the CPU
-void run(struct cpu_6502 *cpu, uint8_t *memory) {
+void cpu_run(struct cpu_6502 *cpu) {
   static struct instruction *instr;
-  const uint8_t opcode = memory[cpu->PC];
+  const uint8_t opcode = cpu->memory[cpu->PC];
   if (unlikely(instr == NULL)) {
     instr = create_opcodes();
   }
-  uint8_t cycles;
-  cycles = instr[opcode].cycles;
+  uint8_t cycles = instr[opcode].cycles;
   // run the output
-  testCpuPart(*cpu, memory, instr[opcode]);
+  testCpuPart(*cpu, cpu->memory, instr[opcode]);
   assert(instr[opcode].fp_instruction != NULL);
-  cycles += instr[opcode].fp_instruction(instr[opcode].addr_mode, cpu, memory);
+  cycles += instr[opcode].fp_instruction(instr[opcode].addr_mode, cpu);
   cpu->PC++;
   cpu->cycles += cycles;
 }
 
 // ADC - ADD with Carry
-uint8_t ADC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  const uint16_t mem = (uint16_t)memory[mem_addr];
+uint8_t ADC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  const uint16_t mem = (uint16_t)cpu->memory[mem_addr];
   const uint16_t AC = (uint16_t)cpu->AC;
   const uint16_t carry = (uint16_t)cpu->SR.Carry;
   const uint16_t added = mem + AC + carry;
-  const uint8_t cycles = page_crossed(addr_mode, cpu, memory, mem_addr);
+  const uint8_t cycles = page_crossed(addr_mode, cpu, mem_addr);
   cpu->AC = (uint8_t)added;
   cpu->SR.Carry = (added > 255);
   // formula for determining overflow
@@ -44,18 +46,18 @@ uint8_t ADC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t
   return cycles;
 }
 // AND - Logical And
-uint8_t AND(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  const uint8_t cycles = page_crossed(addr_mode, cpu, memory, mem_addr);
-  cpu->AC &= memory[mem_addr];
+uint8_t AND(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  const uint8_t cycles = page_crossed(addr_mode, cpu, mem_addr);
+  cpu->AC &= cpu->memory[mem_addr];
   cpu->SR.Zero = (cpu->AC == 0);
   cpu->SR.Negative = cpu->AC & BIT7;
   return cycles;
 }
 // ASL - Arithmetic Shift Left
-uint8_t ASL(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  uint8_t *const ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &memory[mem_addr];
+uint8_t ASL(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  uint8_t *const ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &cpu->memory[mem_addr];
   cpu->SR.Carry = *ptr & BIT7;
   *ptr *= 2;
   cpu->SR.Zero = *ptr == 0;
@@ -63,12 +65,12 @@ uint8_t ASL(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t
   return 0;
 }
 
-uint8_t BCC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
+uint8_t BCC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
   uint8_t cycles = 0;
   if (cpu->SR.Carry == false) {
     // plus one cycle if page crosssed
-    cycles += page_crossed(addr_mode, cpu, memory, mem_addr);
+    cycles += page_crossed(addr_mode, cpu, mem_addr);
     cpu->PC = mem_addr;
     // on sucess add one cycles
     cycles += 1;
@@ -76,24 +78,24 @@ uint8_t BCC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t
   return cycles;
 }
 
-uint8_t BCS(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
+uint8_t BCS(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
   uint8_t cycles = 0;
   if (cpu->SR.Carry == true) {
     // plus one cycle if page crosssed
-    cycles += page_crossed(addr_mode, cpu, memory, mem_addr);
+    cycles += page_crossed(addr_mode, cpu, mem_addr);
     cpu->PC = mem_addr;
     // on sucess add one cycles
     cycles += 1;
   }
   return cycles;
 }
-uint8_t BEQ(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
+uint8_t BEQ(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
   uint8_t cycles = 0;
   if (cpu->SR.Zero == true) {
     // plus one cycle if page crosssed
-    cycles += page_crossed(addr_mode, cpu, memory, mem_addr);
+    cycles += page_crossed(addr_mode, cpu, mem_addr);
     cpu->PC = mem_addr;
     // on sucess add one cycles
     cycles += 1;
@@ -103,20 +105,20 @@ uint8_t BEQ(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t
 
 // Bit Test - Accumulator is Anded with the mem_addr and then the zero flag is
 // set
-uint8_t BIT(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  cpu->SR.Zero = (cpu->AC & memory[mem_addr]) == 0;
-  cpu->SR.Overflow = memory[mem_addr] & BIT6;
-  cpu->SR.Negative = memory[mem_addr] & BIT7;
+uint8_t BIT(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  cpu->SR.Zero = (cpu->AC & cpu->memory[mem_addr]) == 0;
+  cpu->SR.Overflow = cpu->memory[mem_addr] & BIT6;
+  cpu->SR.Negative = cpu->memory[mem_addr] & BIT7;
   return 0;
 }
 
-uint8_t BMI(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
+uint8_t BMI(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
   uint8_t cycles = 0;
   if (cpu->SR.Negative == true) {
     // plus one cycle if page crosssed
-    cycles += page_crossed(addr_mode, cpu, memory, mem_addr);
+    cycles += page_crossed(addr_mode, cpu, mem_addr);
     cpu->PC = mem_addr;
     // on sucess add one cycles
     cycles += 1;
@@ -124,12 +126,12 @@ uint8_t BMI(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t
   return cycles;
 }
 
-uint8_t BNE(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
+uint8_t BNE(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
   uint8_t cycles = 0;
   if (cpu->SR.Zero == false) {
     // plus one cycle if page crosssed
-    cycles += page_crossed(addr_mode, cpu, memory, mem_addr);
+    cycles += page_crossed(addr_mode, cpu, mem_addr);
     cpu->PC = mem_addr;
     // on sucess add one cycles
     cycles += 1;
@@ -137,12 +139,12 @@ uint8_t BNE(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t
   return cycles;
 }
 
-uint8_t BPL(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
+uint8_t BPL(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
   uint8_t cycles = 0;
   if (cpu->SR.Negative == false) {
     // plus one cycle if page crosssed
-    cycles += page_crossed(addr_mode, cpu, memory, mem_addr);
+    cycles += page_crossed(addr_mode, cpu, mem_addr);
     cpu->PC = mem_addr;
     // on sucess add one cycles
     cycles += 1;
@@ -150,25 +152,25 @@ uint8_t BPL(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t
   return cycles;
 }
 
-uint8_t BRK(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
+uint8_t BRK(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
   cpu->SR.Break = true;
-  memory[cpu->SP + 0x0100] = (uint8_t)cpu->PC >> 8;
+  cpu->memory[cpu->SP + 0x0100] = (uint8_t)cpu->PC >> 8;
   cpu->SP--;
-  memory[cpu->SP + 0x0100] = (uint8_t)cpu->PC;
+  cpu->memory[cpu->SP + 0x0100] = (uint8_t)cpu->PC;
   cpu->SP--;
-  memory[cpu->SP + 0x0100] = combine_SR(cpu->SR);
+  cpu->memory[cpu->SP + 0x0100] = cpu_combine_SR(cpu->SR);
   cpu->SP--;
-  cpu->PC = ((uint16_t)memory[0xFFFE] << 8) + (uint16_t)memory[0xFFFF];
+  cpu->PC = ((uint16_t)cpu->memory[0xFFFE] << 8) + (uint16_t)cpu->memory[0xFFFF];
   return 0;
 }
 
-uint8_t BVC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
+uint8_t BVC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
   uint8_t cycles = 0;
   if (cpu->SR.Overflow == false) {
     // plus one cycle if page crosssed
-    cycles += page_crossed(addr_mode, cpu, memory, mem_addr);
+    cycles += page_crossed(addr_mode, cpu, mem_addr);
     cpu->PC = mem_addr;
     // on sucess add one cycles
     cycles += 1;
@@ -176,12 +178,12 @@ uint8_t BVC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t
   return cycles;
 }
 
-uint8_t BVS(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
+uint8_t BVS(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
   uint8_t cycles = 0;
   if (cpu->SR.Overflow == true) {
     // plus one cycle if page crosssed
-    cycles += page_crossed(addr_mode, cpu, memory, mem_addr);
+    cycles += page_crossed(addr_mode, cpu, mem_addr);
     cpu->PC = mem_addr;
     // on sucess add one cycles
     cycles += 1;
@@ -189,69 +191,69 @@ uint8_t BVS(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t
   return cycles;
 }
 
-uint8_t CLC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
+uint8_t CLC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
-  (void)memory;
+  (void)cpu->memory;
   cpu->SR.Carry = false;
   return 0;
 }
 
-uint8_t CLD(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
+uint8_t CLD(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
-  (void)memory;
+  (void)cpu->memory;
   cpu->SR.Decimal = false;
   return 0;
 }
-uint8_t CLI(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
+uint8_t CLI(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
-  (void)memory;
+  (void)cpu->memory;
   cpu->SR.Interrupt = false;
   return 0;
 }
-uint8_t CLV(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
+uint8_t CLV(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
-  (void)memory;
+  (void)cpu->memory;
   cpu->SR.Overflow = false;
   return 0;
 }
 
-uint8_t CMP(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  const uint8_t cycles = page_crossed(addr_mode, cpu, memory, mem_addr);
-  cpu->SR.Carry = cpu->AC >= memory[mem_addr];
-  cpu->SR.Zero = cpu->AC == memory[mem_addr];
-  cpu->SR.Negative = (cpu->AC - memory[mem_addr]) & BIT7;
+uint8_t CMP(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  const uint8_t cycles = page_crossed(addr_mode, cpu, mem_addr);
+  cpu->SR.Carry = cpu->AC >= cpu->memory[mem_addr];
+  cpu->SR.Zero = cpu->AC == cpu->memory[mem_addr];
+  cpu->SR.Negative = (cpu->AC - cpu->memory[mem_addr]) & BIT7;
   return cycles;
 }
 
-uint8_t CPX(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  const uint8_t cycles = page_crossed(addr_mode, cpu, memory, mem_addr);
-  cpu->SR.Carry = cpu->X >= memory[mem_addr];
-  cpu->SR.Zero = cpu->X == memory[mem_addr];
-  cpu->SR.Negative = (cpu->X - memory[mem_addr]) & BIT7;
+uint8_t CPX(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  const uint8_t cycles = page_crossed(addr_mode, cpu, mem_addr);
+  cpu->SR.Carry = cpu->X >= cpu->memory[mem_addr];
+  cpu->SR.Zero = cpu->X == cpu->memory[mem_addr];
+  cpu->SR.Negative = (cpu->X - cpu->memory[mem_addr]) & BIT7;
   return cycles;
 }
 
-uint8_t CPY(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  const uint8_t cycles = page_crossed(addr_mode, cpu, memory, mem_addr);
-  cpu->SR.Carry = cpu->Y >= memory[mem_addr];
-  cpu->SR.Zero = cpu->Y == memory[mem_addr];
-  cpu->SR.Negative = (cpu->Y - memory[mem_addr]) & BIT7;
+uint8_t CPY(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  const uint8_t cycles = page_crossed(addr_mode, cpu, mem_addr);
+  cpu->SR.Carry = cpu->Y >= cpu->memory[mem_addr];
+  cpu->SR.Zero = cpu->Y == cpu->memory[mem_addr];
+  cpu->SR.Negative = (cpu->Y - cpu->memory[mem_addr]) & BIT7;
   return cycles;
 }
 
-uint8_t DEC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  memory[mem_addr] -= 1;
-  cpu->SR.Zero = memory[mem_addr] == 0;
-  cpu->SR.Negative = memory[mem_addr] & BIT7;
+uint8_t DEC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  cpu->memory[mem_addr] -= 1;
+  cpu->SR.Zero = cpu->memory[mem_addr] == 0;
+  cpu->SR.Negative = cpu->memory[mem_addr] & BIT7;
   return 0;
 }
 
-uint8_t DEX(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  (void)memory;
+uint8_t DEX(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  (void)cpu->memory;
   (void)addr_mode;
   cpu->X--;
   cpu->SR.Zero = cpu->X == 0;
@@ -259,8 +261,8 @@ uint8_t DEX(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t
   return 0;
 }
 
-uint8_t DEY(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  (void)memory;
+uint8_t DEY(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  (void)cpu->memory;
   (void)addr_mode;
   cpu->Y--;
   cpu->SR.Zero = cpu->Y == 0;
@@ -268,25 +270,25 @@ uint8_t DEY(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t
   return 0;
 }
 
-uint8_t EOR(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  const uint8_t cycles = page_crossed(addr_mode, cpu, memory, mem_addr);
-  cpu->AC ^= memory[mem_addr];
+uint8_t EOR(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  const uint8_t cycles = page_crossed(addr_mode, cpu, mem_addr);
+  cpu->AC ^= cpu->memory[mem_addr];
   cpu->SR.Zero = cpu->AC == 0;
   cpu->SR.Negative = cpu->AC & BIT7;
   return cycles;
 }
 
-uint8_t INC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  memory[mem_addr]++;
-  cpu->SR.Zero = memory[mem_addr] == 0;
-  cpu->SR.Negative = memory[mem_addr] & BIT7;
+uint8_t INC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  cpu->memory[mem_addr]++;
+  cpu->SR.Zero = cpu->memory[mem_addr] == 0;
+  cpu->SR.Negative = cpu->memory[mem_addr] & BIT7;
   return 0;
 }
 
-uint8_t INX(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  (void)memory;
+uint8_t INX(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  (void)cpu->memory;
   (void)addr_mode;
   cpu->X++;
   cpu->SR.Zero = cpu->X == 0;
@@ -294,8 +296,8 @@ uint8_t INX(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t
   return 0;
 }
 
-uint8_t INY(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  (void)memory;
+uint8_t INY(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  (void)cpu->memory;
   (void)addr_mode;
   cpu->Y++;
   cpu->SR.Zero = cpu->Y == 0;
@@ -303,18 +305,18 @@ uint8_t INY(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t
   return 0;
 }
 
-uint8_t JMP(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
+uint8_t JMP(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   // subtract one for the later +1 in fn run
-  cpu->PC = fetch_addr_mode(addr_mode, cpu, memory) - 1;
+  cpu->PC = fetch_addr_mode(addr_mode, cpu) - 1;
   return 0;
 }
 
-uint8_t JSR(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
+uint8_t JSR(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
   const uint16_t pc_to_push = cpu->PC;
-  memory[cpu->SP + 0x0100] = pc_to_push >> 8;
+  cpu->memory[cpu->SP + 0x0100] = pc_to_push >> 8;
   cpu->SP--;
-  memory[cpu->SP + 0x0100] = pc_to_push & 0xFF;
+  cpu->memory[cpu->SP + 0x0100] = pc_to_push & 0xFF;
   cpu->SP--;
   cpu->PC = mem_addr;
   cpu->PC--;
@@ -322,97 +324,97 @@ uint8_t JSR(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t
 }
 
 // LDA - load Accumulator
-uint8_t LDA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  const uint8_t cycles = page_crossed(addr_mode, cpu, memory, mem_addr);
-  cpu->AC = memory[mem_addr];
+uint8_t LDA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  const uint8_t cycles = page_crossed(addr_mode, cpu, mem_addr);
+  cpu->AC = cpu->memory[mem_addr];
   cpu->SR.Zero = cpu->AC == 0;
   cpu->SR.Negative = cpu->AC & BIT7;
   return cycles;
 }
 
-uint8_t LDX(enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  const uint8_t cycles = page_crossed(addr_mode, cpu, memory, mem_addr);
-  cpu->X = memory[mem_addr];
+uint8_t LDX(enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  const uint8_t cycles = page_crossed(addr_mode, cpu, mem_addr);
+  cpu->X = cpu->memory[mem_addr];
   cpu->SR.Zero = cpu->X == 0;
   cpu->SR.Negative = cpu->X & BIT7;
   return cycles;
 }
 
-uint8_t LDY(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  const uint8_t cycles = page_crossed(addr_mode, cpu, memory, mem_addr);
-  cpu->Y = memory[mem_addr];
+uint8_t LDY(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  const uint8_t cycles = page_crossed(addr_mode, cpu, mem_addr);
+  cpu->Y = cpu->memory[mem_addr];
   cpu->SR.Zero = cpu->Y == 0;
   cpu->SR.Negative = cpu->Y & BIT7;
   return cycles;
 }
 
-uint8_t LSR(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  uint8_t *const ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &memory[mem_addr];
+uint8_t LSR(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  uint8_t *const ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &cpu->memory[mem_addr];
   cpu->SR.Carry = *ptr & BIT0;
   *ptr >>= 1;
   cpu->SR.Zero = *ptr == 0;
   cpu->SR.Negative = *ptr & BIT7;
   return 0;
 }
-uint8_t NOP(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
+uint8_t NOP(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
   if (addr_mode == ABSOLUTEX) {
-    return page_crossed(addr_mode, cpu, memory, mem_addr);
+    return page_crossed(addr_mode, cpu, mem_addr);
   }
   return 0;
 }
 
-uint8_t ORA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  cpu->AC = cpu->AC | memory[mem_addr];
+uint8_t ORA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  cpu->AC = cpu->AC | cpu->memory[mem_addr];
   cpu->SR.Zero = cpu->AC == 0;
   cpu->SR.Negative = cpu->AC & BIT7;
   uint8_t cycles = 0;
-  cycles += page_crossed(addr_mode, cpu, memory, mem_addr);
+  cycles += page_crossed(addr_mode, cpu, mem_addr);
   return cycles;
 }
 
-uint8_t PHA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
+uint8_t PHA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
-  memory[0x0100 + cpu->SP] = cpu->AC;
+  cpu->memory[0x0100 + cpu->SP] = cpu->AC;
   cpu->SP--;
   return 0;
 }
 
-uint8_t PHP(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
+uint8_t PHP(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
   cpu->SR.Break = true;
-  memory[0x0100 + cpu->SP] = combine_SR(cpu->SR);
+  cpu->memory[0x0100 + cpu->SP] = cpu_combine_SR(cpu->SR);
   cpu->SR.Break = false;
   cpu->SP--;
   return 0;
 }
 
-uint8_t PLA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
+uint8_t PLA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
   cpu->SP++;
-  cpu->AC = memory[0x0100 + cpu->SP];
+  cpu->AC = cpu->memory[0x0100 + cpu->SP];
   cpu->SR.Zero = cpu->AC == 0;
   cpu->SR.Negative = cpu->AC & BIT7;
   return 0;
 }
 
-uint8_t PLP(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
+uint8_t PLP(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
   cpu->SP++;
   // NOTICE: THIS CHANGES THE SR
-  expand_SR(cpu, memory[0x0100 + cpu->SP]);
+  cpu_expand_SR(cpu, cpu->memory[0x0100 + cpu->SP]);
   cpu->SR.Break = false;
   return 0;
 }
 
-uint8_t ROL(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  uint8_t *const ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &memory[mem_addr];
+uint8_t ROL(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  uint8_t *const ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &cpu->memory[mem_addr];
   const uint8_t old_bit_7 = *ptr & BIT7;
   *ptr = (*ptr << 1) + cpu->SR.Carry;
   cpu->SR.Carry = old_bit_7;
@@ -421,9 +423,9 @@ uint8_t ROL(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t
   return 0;
 }
 
-uint8_t ROR(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  uint8_t *const ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &memory[mem_addr];
+uint8_t ROR(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  uint8_t *const ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &cpu->memory[mem_addr];
   const uint8_t old_bit_7 = *ptr & BIT0;
   *ptr = (*ptr >> 1) + (cpu->SR.Carry << 7);
   cpu->SR.Carry = old_bit_7 != 0;
@@ -432,29 +434,29 @@ uint8_t ROR(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t
   return 0;
 }
 
-uint8_t RTI(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
+uint8_t RTI(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
   cpu->SP++;
-  expand_SR(cpu, memory[0x0100 + cpu->SP]);
-  cpu->PC = ((uint16_t)memory[0x0100 + cpu->SP + 2] << 8) + memory[0x0100 + cpu->SP + 1] - 1;
+  cpu_expand_SR(cpu, cpu->memory[0x0100 + cpu->SP]);
+  cpu->PC = ((uint16_t)cpu->memory[0x0100 + cpu->SP + 2] << 8) + cpu->memory[0x0100 + cpu->SP + 1] - 1;
   cpu->SP += 2;
   return 0;
 }
 
-uint8_t RTS(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
+uint8_t RTS(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
-  cpu->PC = (((uint16_t)memory[0x0100 + cpu->SP + 2]) << 8) + memory[0x0100 + cpu->SP + 1];
+  cpu->PC = (((uint16_t)cpu->memory[0x0100 + cpu->SP + 2]) << 8) + cpu->memory[0x0100 + cpu->SP + 1];
   cpu->SP += 2;
   return 0;
 }
 
-uint8_t SBC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  const uint16_t mem = (uint16_t)memory[mem_addr];
+uint8_t SBC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  const uint16_t mem = (uint16_t)cpu->memory[mem_addr];
   const uint16_t AC = (uint16_t)cpu->AC;
   const uint16_t carry = (uint16_t)cpu->SR.Carry;
   const uint16_t added = AC - mem - (1 - carry);
-  const uint8_t cycles = page_crossed(addr_mode, cpu, memory, mem_addr);
+  const uint8_t cycles = page_crossed(addr_mode, cpu, mem_addr);
   cpu->AC = (uint8_t)added;
   cpu->SR.Carry = !(added & 0xFF00);
   // formula for determining overflow
@@ -465,92 +467,92 @@ uint8_t SBC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t
   return cycles;
 }
 
-uint8_t SEC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  (void)memory;
+uint8_t SEC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  (void)cpu->memory;
   (void)addr_mode;
   cpu->SR.Carry = true;
   return 0;
 }
 
-uint8_t SED(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  (void)memory;
+uint8_t SED(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  (void)cpu->memory;
   (void)addr_mode;
   cpu->SR.Decimal = true;
   return 0;
 }
 
-uint8_t SEI(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  (void)memory;
+uint8_t SEI(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  (void)cpu->memory;
   (void)addr_mode;
   cpu->SR.Interrupt = true;
   return 0;
 }
 
-uint8_t STA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  memory[mem_addr] = cpu->AC;
+uint8_t STA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  cpu->memory[mem_addr] = cpu->AC;
   return 0;
 }
 
-uint8_t STX(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  memory[mem_addr] = cpu->X;
+uint8_t STX(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  cpu->memory[mem_addr] = cpu->X;
   return 0;
 }
 
-uint8_t STY(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  memory[mem_addr] = cpu->Y;
+uint8_t STY(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  cpu->memory[mem_addr] = cpu->Y;
   return 0;
 }
 
-uint8_t TAX(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
+uint8_t TAX(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
-  (void)memory;
+  (void)cpu->memory;
   cpu->X = cpu->AC;
   cpu->SR.Zero = cpu->X == 0;
   cpu->SR.Negative = cpu->X & BIT7;
   return 0;
 }
 
-uint8_t TAY(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
+uint8_t TAY(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
-  (void)memory;
+  (void)cpu->memory;
   cpu->Y = cpu->AC;
   cpu->SR.Zero = cpu->Y == 0;
   cpu->SR.Negative = cpu->Y & BIT7;
   return 0;
 }
 
-uint8_t TSX(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
+uint8_t TSX(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
-  (void)memory;
+  (void)cpu->memory;
   cpu->X = cpu->SP;
   cpu->SR.Zero = cpu->X == 0;
   cpu->SR.Negative = cpu->X & BIT7;
   return 0;
 }
 
-uint8_t TXA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
+uint8_t TXA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
-  (void)memory;
+  (void)cpu->memory;
   cpu->AC = cpu->X;
   cpu->SR.Zero = cpu->AC == 0;
   cpu->SR.Negative = cpu->AC & BIT7;
   return 0;
 }
 
-uint8_t TXS(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
+uint8_t TXS(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
-  (void)memory;
+  (void)cpu->memory;
   cpu->SP = cpu->X;
 
   return 0;
 }
 
-uint8_t TYA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
+uint8_t TYA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
-  (void)memory;
+  (void)cpu->memory;
   cpu->AC = cpu->Y;
   cpu->SR.Zero = cpu->AC == 0;
   cpu->SR.Negative = cpu->AC & BIT7;
@@ -559,34 +561,34 @@ uint8_t TYA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t
 
 // UNOFFICIAL OPCODES
 
-uint8_t LAX(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  cpu->AC = memory[mem_addr];
+uint8_t LAX(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  cpu->AC = cpu->memory[mem_addr];
   cpu->X = cpu->AC;
   cpu->SR.Zero = cpu->X == 0;
   cpu->SR.Negative = cpu->X & BIT7;
-  return page_crossed(addr_mode, cpu, memory, mem_addr);
+  return page_crossed(addr_mode, cpu, mem_addr);
 }
 
-uint8_t SAX(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  memory[mem_addr] = cpu->AC & cpu->X;
+uint8_t SAX(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  cpu->memory[mem_addr] = cpu->AC & cpu->X;
   return 0;
 }
 
-uint8_t DCP(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  memory[mem_addr]--;
-  cpu->SR.Carry = cpu->AC >= memory[mem_addr];
-  cpu->SR.Zero = cpu->AC == memory[mem_addr];
-  cpu->SR.Negative = (cpu->AC - memory[mem_addr]) & BIT7;
+uint8_t DCP(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  cpu->memory[mem_addr]--;
+  cpu->SR.Carry = cpu->AC >= cpu->memory[mem_addr];
+  cpu->SR.Zero = cpu->AC == cpu->memory[mem_addr];
+  cpu->SR.Negative = (cpu->AC - cpu->memory[mem_addr]) & BIT7;
   return 0;
 }
 
-uint8_t ISB(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  memory[mem_addr]++;
-  const uint16_t mem = (uint16_t)memory[mem_addr];
+uint8_t ISB(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  cpu->memory[mem_addr]++;
+  const uint16_t mem = (uint16_t)cpu->memory[mem_addr];
   const uint16_t AC = (uint16_t)cpu->AC;
   const uint16_t carry = (uint16_t)cpu->SR.Carry;
   const uint16_t added = AC - mem - (1 - carry);
@@ -600,25 +602,25 @@ uint8_t ISB(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t
   return 0;
 }
 
-uint8_t RLA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  uint8_t *const ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &memory[mem_addr];
+uint8_t RLA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  uint8_t *const ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &cpu->memory[mem_addr];
   const bool old_carry_bit = *ptr & BIT7;
   *ptr = (*ptr << 1) + cpu->SR.Carry;
-  cpu->AC = cpu->AC & memory[mem_addr];
+  cpu->AC = cpu->AC & cpu->memory[mem_addr];
   cpu->SR.Carry = old_carry_bit;
   cpu->SR.Zero = cpu->AC == 0;
   cpu->SR.Negative = (cpu->AC & BIT7);
   return 0;
 }
 
-uint8_t RRA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  uint8_t *const ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &memory[mem_addr];
+uint8_t RRA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  uint8_t *const ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &cpu->memory[mem_addr];
   const uint8_t old_bit_7 = *ptr & BIT0;
   *ptr = (*ptr >> 1) + (cpu->SR.Carry << 7);
   cpu->SR.Carry = old_bit_7 != 0;
-  const uint16_t mem = (uint16_t)memory[mem_addr];
+  const uint16_t mem = (uint16_t)cpu->memory[mem_addr];
   const uint16_t AC = (uint16_t)cpu->AC;
   const uint16_t carry = (uint16_t)cpu->SR.Carry;
   const uint16_t added = mem + AC + carry;
@@ -632,36 +634,36 @@ uint8_t RRA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t
   return 0;
 }
 
-uint8_t SLO(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  uint8_t *const ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &memory[mem_addr];
+uint8_t SLO(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  uint8_t *const ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &cpu->memory[mem_addr];
   cpu->SR.Carry = *ptr & BIT7;
   *ptr *= 2;
-  cpu->AC = cpu->AC | memory[mem_addr];
+  cpu->AC = cpu->AC | cpu->memory[mem_addr];
   cpu->SR.Zero = cpu->AC == 0;
   cpu->SR.Negative = (cpu->AC & BIT7);
   return 0;
 }
 
-uint8_t SRE(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, uint8_t *memory) {
-  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu, memory);
-  uint8_t *const ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &memory[mem_addr];
+uint8_t SRE(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
+  const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
+  uint8_t *const ptr = (addr_mode == ACCUMULATOR) ? &cpu->AC : &cpu->memory[mem_addr];
   cpu->SR.Carry = *ptr & BIT0;
   *ptr >>= 1;
-  cpu->AC = cpu->AC ^ memory[mem_addr];
+  cpu->AC = cpu->AC ^ cpu->memory[mem_addr];
   cpu->SR.Zero = cpu->AC == 0;
   cpu->SR.Negative = (cpu->AC & BIT7);
   return 0;
 }
 
-// gets the correct memory address to be used by the corresponding opcode
-// returns a 16 bit integer containing the propper memory address
+// gets the correct cpu->memory address to be used by the corresponding opcode
+// returns a 16 bit integer containing the propper cpu->memory address
 
 bool is_page_crossed(const uint16_t addr1, const uint16_t addr2) {
   return (addr1 & 0xFF00) != (addr2 & 0xFF00);
 }
 
-uint8_t page_crossed(const enum addr_mode_states addr_mode, const struct cpu_6502 *cpu, const uint8_t *memory, uint16_t mem_addr) {
+uint8_t page_crossed(const enum addr_mode_states addr_mode, const struct cpu_6502 *cpu, uint16_t mem_addr) {
   switch (addr_mode) {
   case ABSOLUTEX:
     return is_page_crossed(mem_addr - cpu->X, mem_addr);
@@ -674,10 +676,10 @@ uint8_t page_crossed(const enum addr_mode_states addr_mode, const struct cpu_650
   case RELATIVE: {
     // from the next PC
     mem_addr += 1;
-    if (memory[cpu->PC] < 128) {
-      return is_page_crossed(mem_addr, mem_addr - (uint16_t)memory[cpu->PC]);
+    if (cpu->memory[cpu->PC] < 128) {
+      return is_page_crossed(mem_addr, mem_addr - (uint16_t)cpu->memory[cpu->PC]);
     } else {
-      return is_page_crossed(mem_addr, mem_addr + (uint8_t)(~memory[cpu->PC] + 1));
+      return is_page_crossed(mem_addr, mem_addr + (uint8_t)(~cpu->memory[cpu->PC] + 1));
     }
     break;
   }
@@ -688,7 +690,7 @@ uint8_t page_crossed(const enum addr_mode_states addr_mode, const struct cpu_650
   }
 }
 
-uint16_t fetch_addr_mode(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu, const uint8_t *memory) {
+uint16_t fetch_addr_mode(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   uint16_t param = 0;
   switch (addr_mode) {
   case IMPLIED: {
@@ -704,74 +706,74 @@ uint16_t fetch_addr_mode(const enum addr_mode_states addr_mode, struct cpu_6502 
     break;
   }
   case ZEROPAGE: {
-    const uint8_t mem_access = memory[cpu->PC + 1];
+    const uint8_t mem_access = cpu->memory[cpu->PC + 1];
     cpu->PC += 1;
     param = (uint8_t)mem_access;
     break;
   }
   case ZEROPAGEX: {
-    const uint8_t memAccess = memory[cpu->PC + 1];
+    const uint8_t memAccess = cpu->memory[cpu->PC + 1];
     cpu->PC += 1;
     param = (uint8_t)(memAccess + cpu->X);
     break;
   }
   case ZEROPAGEY: {
-    const uint8_t memAccess = memory[cpu->PC + 1];
+    const uint8_t memAccess = cpu->memory[cpu->PC + 1];
     cpu->PC += 1;
     // printf("memaccess: %x\n", cpu->PC);
     param = (uint8_t)(memAccess + cpu->Y);
     break;
   }
   case ABSOLUTE: {
-    const uint16_t memAccess = memory[cpu->PC + 1] + (((uint16_t)memory[cpu->PC + 2]) << 8);
+    const uint16_t memAccess = cpu->memory[cpu->PC + 1] + (((uint16_t)cpu->memory[cpu->PC + 2]) << 8);
     param = memAccess;
     cpu->PC += 2;
     break;
   }
   case ABSOLUTEX: {
-    const uint16_t memAccess = memory[cpu->PC + 1] + (((uint16_t)memory[cpu->PC + 2]) << 8);
+    const uint16_t memAccess = cpu->memory[cpu->PC + 1] + (((uint16_t)cpu->memory[cpu->PC + 2]) << 8);
     param = memAccess + cpu->X;
     cpu->PC += 2;
     break;
   }
   case ABSOLUTEY: {
-    const uint16_t memAccess = memory[cpu->PC + 1] + (((uint16_t)memory[cpu->PC + 2]) << 8);
+    const uint16_t memAccess = cpu->memory[cpu->PC + 1] + (((uint16_t)cpu->memory[cpu->PC + 2]) << 8);
     param = memAccess + cpu->Y;
     cpu->PC += 2;
     break;
   }
   case INDIRECT: {
-    const uint16_t memAccess = memory[cpu->PC + 1] + (((uint16_t)memory[cpu->PC + 2]) << 8);
-    param = (((uint16_t)memory[memAccess + 1]) << 8) + memory[memAccess];
+    const uint16_t memAccess = cpu->memory[cpu->PC + 1] + (((uint16_t)cpu->memory[cpu->PC + 2]) << 8);
+    param = (((uint16_t)cpu->memory[memAccess + 1]) << 8) + cpu->memory[memAccess];
     // handle the bug in the indirect vector goes to the same
     // page when crossing the page boundry
     if (((memAccess) & 0xFF) == 0xFF) {
-      param = (((uint16_t)memory[memAccess & 0xFF00] << 8) + memory[memAccess]);
+      param = (((uint16_t)cpu->memory[memAccess & 0xFF00] << 8) + cpu->memory[memAccess]);
     }
     cpu->PC += 2;
     break;
   }
   case INDIRECTX: {
-    const uint8_t memAccess = memory[cpu->PC + 1];
+    const uint8_t memAccess = cpu->memory[cpu->PC + 1];
     cpu->PC += 1;
     //&ed with 0xFF because of sign extensions
-    param = (((uint16_t)memory[(memAccess + cpu->X + 1) & 0xFF]) << 8) + memory[(memAccess + cpu->X) & 0xFF];
+    param = (((uint16_t)cpu->memory[(memAccess + cpu->X + 1) & 0xFF]) << 8) + cpu->memory[(memAccess + cpu->X) & 0xFF];
     break;
   }
   case INDIRECTY: {
-    const uint8_t memAccess = memory[cpu->PC + 1];
+    const uint8_t memAccess = cpu->memory[cpu->PC + 1];
     cpu->PC += 1;
     //&ed with 0xFF because of sign extensions
-    param = (((uint16_t)memory[(memAccess + 1) & 0xFF]) << 8) + ((uint16_t)memory[memAccess & 0xFF]) + (uint16_t)cpu->Y;
+    param = (((uint16_t)cpu->memory[(memAccess + 1) & 0xFF]) << 8) + ((uint16_t)cpu->memory[memAccess & 0xFF]) + (uint16_t)cpu->Y;
     break;
   }
   case RELATIVE: {
-    int8_t add = memory[cpu->PC + 1];
+    int8_t add = cpu->memory[cpu->PC + 1];
     // relative is signed so we must check
     // whether it is greater than 127 and if so
     // we make it negative by noting it and subtracting one
-    if (memory[cpu->PC + 1] > 0x7F) {
-      add = -1 * ~(memory[cpu->PC + 1]) - 1;
+    if (cpu->memory[cpu->PC + 1] > 0x7F) {
+      add = -1 * ~(cpu->memory[cpu->PC + 1]) - 1;
     }
     param = cpu->PC + add + 1;
     cpu->PC += 1;
@@ -782,14 +784,14 @@ uint16_t fetch_addr_mode(const enum addr_mode_states addr_mode, struct cpu_6502 
     break;
   }
   if (param > 0x07FF && param < 0x2000) {
-    param = param % 0x800;
+    param %= 0x800;
   } else if (param > 0x2007 && param < 0x4000) {
     param = param % 0x0008 + 0x2000;
   }
   return param;
 }
 
-uint8_t combine_SR(const struct status_reg SR) {
+uint8_t cpu_combine_SR(const struct status_reg SR) {
   uint8_t combine = 0;
   combine += SR.Negative << 7;
   combine += SR.Overflow << 6;
@@ -802,7 +804,7 @@ uint8_t combine_SR(const struct status_reg SR) {
   return combine;
 }
 
-void expand_SR(struct cpu_6502 *cpu, const uint8_t SR) {
+void cpu_expand_SR(struct cpu_6502 *cpu, const uint8_t SR) {
   cpu->SR.Negative = SR & BIT7;
   cpu->SR.Overflow = SR & BIT6;
   cpu->SR.Break = SR & BIT4;
