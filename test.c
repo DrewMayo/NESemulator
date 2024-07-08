@@ -1,11 +1,12 @@
 #include "test.h"
+#include "bus.h"
 #include "cpu.h"
 #include <stdbool.h>
 #include <stdint.h>
 
-void testCpuPart(const struct cpu_6502 cpu, const uint8_t *memory, const struct instruction instr) {
+void testCpuPart(const struct cpu_6502 cpu, const struct instruction instr) {
   printf("%04X  ", cpu.PC & 0xFFFF);
-  printf("%02X ", memory[cpu.PC] & 0xFF);
+  printf("%02X ", bus_read(cpu.bus, cpu.PC, CPUMEM) & 0xFF);
   switch (instr.addr_mode) {
   case IMPLIED:
   case ACCUMULATOR:
@@ -18,13 +19,13 @@ void testCpuPart(const struct cpu_6502 cpu, const uint8_t *memory, const struct 
   case INDIRECTY:
   case ZEROPAGEY:
   case RELATIVE:
-    printf("%02X   ", memory[cpu.PC + 1] & 0xFF);
+    printf("%02X   ", bus_read(cpu.bus, cpu.PC + 1, CPUMEM) & 0xFF);
     break;
   case ABSOLUTE:
   case ABSOLUTEX:
   case ABSOLUTEY:
   case INDIRECT:
-    printf("%02X %02X", memory[cpu.PC + 1] & 0xFF, memory[cpu.PC + 2] & 0xFF);
+    printf("%02X %02X", bus_read(cpu.bus, cpu.PC + 1, CPUMEM) & 0xFF, bus_read(cpu.bus, cpu.PC + 2, CPUMEM) & 0xFF);
     break;
   }
   printf("  ");

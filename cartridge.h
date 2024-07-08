@@ -1,12 +1,15 @@
+#pragma once
 #ifndef CARTRIDGE_H
 #define CARTRIDGE_H
 #include "cpu.h"
+#include "ppu.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-//bool cart_build(const char *filename, struct cartridge *cart);
+// bool cart_build(const char *filename, struct cartridge *cart);
+struct Bus;
 
 enum mirroring {
   VERTICAL,
@@ -28,8 +31,12 @@ struct cartridge {
   bool alternate_name_table;
   bool VS_unisystem;
   enum mirroring mirror;
+  struct Bus *bus;
 };
 
-bool cart_build(const char *filename, struct cartridge *cart, struct cpu_6502 *cpu);
+struct ppu_2C02;
+struct cartridge *cart_build(const char *filename);
+uint8_t cart_read_prg_memory(struct cartridge *cart, uint16_t mem_location);
+void cart_write_prg_memory(struct cartridge *cart, uint16_t mem_location, uint8_t value);
 void cart_delete(struct cartridge *cart);
 #endif

@@ -1,22 +1,26 @@
+#pragma once
+#ifndef NESSDL_H
+#define NESSDL_H
+
 #include <SDL2/SDL.h>
-#include <SDL2/SDL_render.h>
-#include <SDL2/SDL_video.h>
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_timer.h>
 #include <SDL2/SDL_video.h>
 #include <stdbool.h>
 
-#define WINDOW_WIDTH 1280
-#define WINDOW_HEIGHT 720
+#define WINDOW_WIDTH 256
+#define WINDOW_HEIGHT 240
 
-typedef struct {
+struct nsdl_manager {
   SDL_Window *window;
   SDL_Renderer *renderer;
-} nsdl_manager;
+};
 
-nsdl_manager* start_window();
+struct nsdl_manager *start_window();
 
 bool destroy_window();
 
-bool renderLoop(nsdl_manager *manager);
+bool renderLoop(struct nsdl_manager *manager);
+
+#endif // !NESSDL_H

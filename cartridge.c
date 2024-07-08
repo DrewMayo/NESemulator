@@ -1,21 +1,21 @@
 #include "cartridge.h"
 #include "bitmask.h"
-#include "cpu.h"
+#include "emulator.h"
 #include <stdint.h>
 #include <stdio.h>
 
-#define PRG_ROM_SIZE 16348
+#define PRG_ROM_SIZE 16384
 #define CHR_ROM_SIZE 8192
 #define PRG_RAM_SIZE 8192
 
 bool is_nes(const uint8_t *header);
-bool cart_build(const char *filename, struct cartridge *cart, struct cpu_6502 *cpu) {
+
+struct cartridge *cart_build(const char *filename) {
   FILE *fp = fopen(filename, "rb");
+  struct cartridge *cart = (struct cartridge *)malloc(sizeof(struct cartridge));
   fread(cart->header, sizeof(uint8_t), 16, fp);
   if (!is_nes(cart->header)) {
-    printf("Could not load rom! Not an NES file!\n");
-    fclose(fp);
-    return false;
+    return NULL;
   }
   cart->ines = 1;
   // malloc the prg_rom and chr_rom
@@ -40,50 +40,46 @@ bool cart_build(const char *filename, struct cartridge *cart, struct cpu_6502 *c
   cart->prg_ram = (uint8_t *)malloc(sizeof(uint8_t) * PRG_RAM_SIZE * cart->header[8]);
 
   // mapper 0
-  switch(cart->mapper) {
-    case 0: {
-      fread(cart->prg_rom, sizeof(uint8_t), PRG_ROM_SIZE * cart->header[4], fp);
-      fread(cart->chr_rom, sizeof(uint8_t), CHR_ROM_SIZE, fp);
-      if (cart->header[4] == 1) {
-        memcpy(&cpu->memory[0x8000], cart->prg_rom, PRG_ROM_SIZE);
-        memcpy(&cpu->memory[0xC000], cart->prg_rom, PRG_ROM_SIZE);
-      } else {
-        memcpy(&cpu->memory[0x8000], cart->prg_rom, PRG_ROM_SIZE * 2);
-      }
-    }
+  switch (cart->mapper) {
+  case 0: {
+    fread(cart->prg_rom, sizeof(uint8_t), PRG_ROM_SIZE * cart->header[4], fp);
+    fread(cart->chr_rom, sizeof(uint8_t), CHR_ROM_SIZE, fp);
+  }
   }
   fclose(fp);
-  return true;
+  return cart;
 }
-/*
-uint8_t read_cartridge_prg_memory(struct cartridge *cart, uint16_t mem_location) {
+
+
+uint8_t cart_read_prg_memory(struct cartridge *cart, uint16_t mem_location) {
   switch (cart->mapper) {
     case 0: {
       mem_location %= 0x8000;
       if (cart->header[4] == 1) {
-        return cart->prg_rom[mem_location % PRG_ROM_SIZE];
+        mem_location %= PRG_ROM_SIZE;
+        return cart->prg_rom[mem_location];
       } else {
         return cart->prg_rom[mem_location];
       }
     }
   }
-  printf("ERROR ON READ IN PRG_ROM");
   return 0;
 }
 
-void write_cartridge_prg_memory(struct cartridge *cart, uint16_t mem_location, uint8_t *ptr) { 
+void cart_write_prg_memory(struct cartridge *cart, uint16_t mem_location, uint8_t value) {
   switch (cart->mapper) {
     case 0: {
       mem_location %= 0x8000;
       if (cart->header[4] == 1) {
-        cart->prg_rom[mem_location % PRG_ROM_SIZE] = *ptr;
+        mem_location %= PRG_ROM_SIZE;
+        cart->prg_rom[mem_location] = value;
       } else {
-        cart->prg_rom[mem_location] = *ptr;
+        cart->prg_rom[mem_location] = value;
       }
     }
   }
 }
-*/
+
 // All nes files start with
 // 4E 45 53 1A or "NES^Z" so
 // it checks for this part

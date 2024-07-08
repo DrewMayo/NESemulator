@@ -1,10 +1,14 @@
+#pragma once
 #ifndef CPU_H
 #define CPU_H
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+
+struct Bus;
 
 struct status_reg {
   bool Negative;
@@ -16,6 +20,13 @@ struct status_reg {
   bool Carry;
 };
 
+enum intrpt_states {
+  NOINTERRUPT,
+  INONMASKABLE,
+  RESET,
+  IREQUEST,
+};
+
 struct cpu_6502 {
   uint8_t AC;           // Accumulator Register
   uint8_t X;            // X register
@@ -25,6 +36,8 @@ struct cpu_6502 {
   uint16_t PC;          // Program Counter
   int cycles;
   uint8_t memory[65536];
+  enum intrpt_states interrupt_state;
+  struct Bus *bus;
 };
 
 enum addr_mode_states {
@@ -50,10 +63,10 @@ struct instruction {
   uint8_t (*fp_instruction)(const enum addr_mode_states, struct cpu_6502 *);
 };
 
-void cpu_run(struct cpu_6502 *cpu);
-uint8_t cpu_combine_SR(const struct status_reg SR);
-void cpu_expand_SR(struct cpu_6502 *cpu, const uint8_t SR);
-
+struct cpu_6502 *cpu_build();
+uint8_t cpu_run(struct cpu_6502 *const cpu);
+void cpu_reset(struct cpu_6502 *cpu);
+uint8_t cpu_combine_SR(struct status_reg SR);
 // Status reguster bit 7 to 0
 //
 // N .... Negative
@@ -71,8 +84,8 @@ void cpu_expand_SR(struct cpu_6502 *cpu, const uint8_t SR);
 //  The stack is from 0x0100 to 0x01FF
 //
 //  Important Vectors
-//  0xFFFA 0xFFFB ... NMI (Non-maskable Interrupt)
-//  0xFFFC 0xFFFD ... RES (Reset)
-//  0xFFFE 0xFFFF ... IRQ (Interupt Request)
+//  0xFFFB 0xFFFA ... NMI (Non-maskable Interrupt)
+//  0xFFFD 0xFFFC ... RES (Reset)
+//  0xFFFF 0xFFFE ... IRQ (Interupt Request)
 //
 #endif

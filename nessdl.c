@@ -2,7 +2,7 @@
 
 //This starts the window,creates the manager, and creates 
 //the renderer to use.
-nsdl_manager* start_window() {
+struct nsdl_manager* start_window() {
 
   //Initialize the SDL
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_AUDIO) == -1) {
@@ -10,7 +10,7 @@ nsdl_manager* start_window() {
     return NULL;
   }
   //allocate the manager
-  nsdl_manager* manager = malloc(sizeof(nsdl_manager));
+  struct nsdl_manager* manager = malloc(sizeof(struct nsdl_manager));
 
   //create the window and check for errors
   manager->window = SDL_CreateWindow(
@@ -43,7 +43,8 @@ bool destroy_window() {
   return true;
 }
 
-bool renderLoop(nsdl_manager *manager) {
+/*
+bool renderLoop(struct nsdl_manager *manager) {
   bool quit = false;
   SDL_Event e;
   while (!quit) {
@@ -56,4 +57,4 @@ bool renderLoop(nsdl_manager *manager) {
     SDL_RenderPresent(manager->renderer);
   }
   return true;
-}
+} */
