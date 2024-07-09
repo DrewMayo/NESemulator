@@ -29,10 +29,10 @@ uint8_t cpu_run(struct cpu_6502 *const cpu) {
   cycles += instr[opcode].cycles;
   // run the output
   testCpuPart(*cpu, instr[opcode]);
-  //  assert(instr[opcode].fp_instruction != NULL);
-  if (instr[opcode].fp_instruction == NULL) {
+  assert(instr[opcode].fp_instruction != NULL);
+  /*if (instr[opcode].fp_instruction == NULL) {
     return 0;
-  }
+  }*/
   cycles += instr[opcode].fp_instruction(instr[opcode].addr_mode, cpu);
   cpu->PC++;
   cpu->cycles += cycles;

@@ -1,36 +1,36 @@
 #include "ppu.h"
 #include "bitmask.h"
+#include "bus.h"
 #include "cartridge.h"
-#include "cpu.h"
 #include "emulator.h"
 
 #define PPU_WIDTH 341
 #define PPU_HEIGHT 262
 
-void ppu_read_cpu(struct emulator *const emu);
-void ppu_write_cpu(const struct emulator *const emu);
-void ppu_run(struct emulator *const emu);
+void ppu_read_cpu(struct ppu_2C02 *const ppu);
+void ppu_write_cpu(const struct ppu_2C02 *const ppu);
+void ppu_run(struct ppu_2C02 *const ppu);
 
-void ppu_tick(struct emulator *const emu) {
-  if (emu->ppu->cycles % 341 == 0) {
-    ppu_run(emu);
-    emu->ppu->scanline++;
+void ppu_tick(struct ppu_2C02 *const ppu) {
+  if (ppu->cycles % 341 == 0) {
+    ppu_run(ppu);
+    ppu->scanline++;
   }
-  emu->ppu->cycles++;
+  ppu->cycles++;
 }
 
-void ppu_run(struct emulator *const emu) {
-  ppu_read_cpu(emu);
-  if (emu->ppu->scanline == 241) {
-    emu->ppu->PPUSTATUS |= BIT7;
-    emu->cpu->interrupt_state = INONMASKABLE;
-  } else if (emu->ppu->scanline == 261) {
-    emu->ppu->PPUSTATUS &= 0b01111111;
-  } else if (emu->ppu->scanline > 320) {
-    emu->ppu->scanline = -1;
+void ppu_run(struct ppu_2C02 *const ppu) {
+  ppu_read_cpu(ppu);
+  if (ppu->scanline == 241) {
+    ppu->PPUSTATUS |= BIT7;
+    ppu->bus->cpu->interrupt_state = INONMASKABLE;
+  } else if (ppu->scanline == 261) {
+    ppu->PPUSTATUS &= 0b01111111;
+  } else if (ppu->scanline > 320) {
+    ppu->scanline = -1;
   } else {
   }
-  ppu_write_cpu(emu);
+  ppu_write_cpu(ppu);
 }
 struct ppu_2C02 *ppu_build() {
   struct ppu_2C02 *ppu = (struct ppu_2C02 *)malloc(sizeof(struct ppu_2C02));
@@ -42,26 +42,26 @@ struct ppu_2C02 *ppu_build() {
   return ppu;
 }
 
-void ppu_read_cpu(struct emulator *const emu) {
-  emu->ppu->PPUCTRL = emu->cpu->memory[0x2000];
-  emu->ppu->PPUMASK = emu->cpu->memory[0x2001];
-  emu->ppu->PPUSTATUS = emu->cpu->memory[0x2002];
-  emu->ppu->OAMADDR = emu->cpu->memory[0x2003];
-  emu->ppu->OAMDATA = emu->cpu->memory[0x2004];
-  emu->ppu->PPUSCROLL = emu->cpu->memory[0x2005];
-  emu->ppu->PPUADDR = emu->cpu->memory[0x2006];
-  emu->ppu->PPUDATA = emu->cpu->memory[0x2007];
-  emu->ppu->OAMDMA = emu->cpu->memory[0x4014];
+void ppu_read_cpu(struct ppu_2C02 *const ppu) {
+  ppu->PPUCTRL = bus_read(ppu->bus, 0x2000, CPUMEM);
+  ppu->PPUMASK = bus_read(ppu->bus, 0x2001, CPUMEM);
+  ppu->PPUSTATUS = bus_read(ppu->bus, 0x2002, CPUMEM);
+  ppu->OAMADDR = bus_read(ppu->bus, 0x2003, CPUMEM);
+  ppu->OAMDATA = bus_read(ppu->bus, 0x2004, CPUMEM);
+  ppu->PPUSCROLL = bus_read(ppu->bus, 0x2005, CPUMEM);
+  ppu->PPUADDR = bus_read(ppu->bus, 0x2006, CPUMEM);
+  ppu->PPUDATA = bus_read(ppu->bus, 0x2007, CPUMEM);
+  ppu->OAMDMA = bus_read(ppu->bus, 0x4014, CPUMEM);
 }
 
-void ppu_write_cpu(const struct emulator *const emu) {
-  emu->cpu->memory[0x2000] = emu->ppu->PPUCTRL;
-  emu->cpu->memory[0x2001] = emu->ppu->PPUMASK;
-  emu->cpu->memory[0x2002] = emu->ppu->PPUSTATUS;
-  emu->cpu->memory[0x2003] = emu->ppu->OAMADDR;
-  emu->cpu->memory[0x2004] = emu->ppu->OAMDATA;
-  emu->cpu->memory[0x2005] = emu->ppu->PPUSCROLL;
-  emu->cpu->memory[0x2006] = emu->ppu->PPUADDR;
-  emu->cpu->memory[0x2007] = emu->ppu->PPUDATA;
-  emu->cpu->memory[0x4014] = emu->ppu->OAMDMA;
+void ppu_write_cpu(const struct ppu_2C02 *const ppu) {
+  bus_write(ppu->bus, 0x2000, ppu->PPUCTRL, CPUMEM);
+  bus_write(ppu->bus, 0x2001, ppu->PPUMASK, CPUMEM);
+  bus_write(ppu->bus, 0x2002, ppu->PPUSTATUS, CPUMEM);
+  bus_write(ppu->bus, 0x2003, ppu->OAMADDR, CPUMEM);
+  bus_write(ppu->bus, 0x2004, ppu->OAMDATA, CPUMEM);
+  bus_write(ppu->bus, 0x2005, ppu->PPUSCROLL, CPUMEM);
+  bus_write(ppu->bus, 0x2006, ppu->PPUADDR, CPUMEM);
+  bus_write(ppu->bus, 0x2007, ppu->PPUDATA, CPUMEM);
+  bus_write(ppu->bus, 0x2007, ppu->PPUDATA, CPUMEM);
 }

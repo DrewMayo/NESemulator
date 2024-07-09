@@ -18,7 +18,7 @@ int main(int argc, char *argv[]) {
   }
   struct nsdl_manager *manager = start_window();
   // running
-  emu->cpu->PC = 0xC000;
+  // emu->cpu->PC = 0xC000;
   bool quit = false;
   SDL_Event e;
   while (!quit) {

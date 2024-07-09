@@ -50,32 +50,47 @@ struct cartridge *cart_build(const char *filename) {
   return cart;
 }
 
-
 uint8_t cart_read_prg_memory(struct cartridge *cart, uint16_t mem_location) {
   switch (cart->mapper) {
-    case 0: {
-      mem_location %= 0x8000;
-      if (cart->header[4] == 1) {
-        mem_location %= PRG_ROM_SIZE;
-        return cart->prg_rom[mem_location];
-      } else {
-        return cart->prg_rom[mem_location];
-      }
+  case 0: {
+    mem_location %= 0x8000;
+    if (cart->header[4] == 1) {
+      mem_location %= PRG_ROM_SIZE;
+      return cart->prg_rom[mem_location];
+    } else {
+      return cart->prg_rom[mem_location];
     }
+  }
   }
   return 0;
 }
 
 void cart_write_prg_memory(struct cartridge *cart, uint16_t mem_location, uint8_t value) {
   switch (cart->mapper) {
+  case 0: {
+    mem_location %= 0x8000;
+    if (cart->header[4] == 1) {
+      mem_location %= PRG_ROM_SIZE;
+      cart->prg_rom[mem_location] = value;
+    } else {
+      cart->prg_rom[mem_location] = value;
+    }
+  }
+  }
+}
+
+uint8_t cart_read_chr_memory(struct cartridge *cart, uint16_t mem_location) {
+  switch (cart->mapper) {
+  case 0: {
+    return cart->chr_rom[mem_location];
+  }
+  }
+  return 0;
+}
+void cart_write_chr_memory(struct cartridge *cart, uint16_t mem_location, uint8_t value) {
+  switch(cart->mapper) {
     case 0: {
-      mem_location %= 0x8000;
-      if (cart->header[4] == 1) {
-        mem_location %= PRG_ROM_SIZE;
-        cart->prg_rom[mem_location] = value;
-      } else {
-        cart->prg_rom[mem_location] = value;
-      }
+      cart->chr_rom[mem_location] = value;
     }
   }
 }

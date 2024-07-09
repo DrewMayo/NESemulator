@@ -2,7 +2,6 @@
 #ifndef PPU_H
 #define PPU_H
 #include "cartridge.h"
-#include "emulator.h"
 #include <stdint.h>
 struct emulator;
 struct Bus;
@@ -22,6 +21,6 @@ struct ppu_2C02 {
   struct Bus *bus;
 };
 struct cartridge;
-void ppu_tick(struct emulator *const emu);
+void ppu_tick(struct ppu_2C02 *const ppu);
 struct ppu_2C02 *ppu_build();
 #endif
