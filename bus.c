@@ -17,27 +17,28 @@ void bus_write(struct Bus *const bus, uint16_t addr, const uint8_t value, const 
       bus_write(bus, addr, value, PRGCARTMEM);
     }
     bus->cpu->memory[addr] = value;
-  case PPUMEM:{
-    if (addr >= 0x0000 && addr <= 0x1FFF) {
+    break;
+  case PPUMEM: {
+    if (addr <= 0x1FFF) {
       // CHR-ROM
       bus_write(bus, addr, value, CHRCARTMEM);
     } else if (addr >= 0x2000 && addr <= 0x2FFF) {
-      //INTERNAL VRAM 2 KiB
+      // INTERNAL VRAM 2 KiB
       bus->ppu->memory[addr] = value;
-      return;
+      break;
     } else if (addr >= 0x3000 && addr <= 0x3EFF) {
       // UNUSED
       addr %= 0x0400 + 0x2000;
     } else if (addr >= 0x3F00 && addr <= 0x3F1F) {
       // INTERNAL PALLETE RAM
       bus->ppu->memory[addr] = value;
-      return;
+      break;
     } else if (addr >= 0x3F20 && addr <= 0x3FFF) {
       addr %= 0x0020 + 0x3F00;
     }
     bus_write(bus, addr, value, PPUMEM);
     break;
-    }
+  }
   case PRGCARTMEM:
     cart_write_prg_memory(bus->cart, addr, value);
     break;
@@ -60,20 +61,22 @@ uint8_t bus_read(const struct Bus *const bus, uint16_t addr, const enum Memtype 
     return bus->cpu->memory[addr];
   }
   case PPUMEM: {
-    if (addr >= 0x0000 && addr <= 0x1FFF) {
+    if (addr <= 0x1FFF) {
       // CHR-ROM
       return bus_read(bus, addr, CHRCARTMEM);
     } else if (addr >= 0x2000 && addr <= 0x2FFF) {
-      //INTERNAL VRAM 2 KiB
+      // INTERNAL VRAM 2 KiB
       return bus->ppu->memory[addr];
     } else if (addr >= 0x3000 && addr <= 0x3EFF) {
       // UNUSED
       addr %= 0x0400 + 0x2000;
     } else if (addr >= 0x3F00 && addr <= 0x3F1F) {
       // INTERNAL PALLETE RAM
+      return bus->ppu->memory[addr];
     } else if (addr >= 0x3F20 && addr <= 0x3FFF) {
       addr %= 0x0020 + 0x3F00;
     }
+    return bus_read(bus, addr, PPUMEM);
   }
   case PRGCARTMEM: {
     return cart_read_prg_memory(bus->cart, addr);

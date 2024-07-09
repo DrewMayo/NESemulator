@@ -24,7 +24,7 @@ int main(int argc, char *argv[]) {
   while (!quit) {
     int cycles = cpu_run(emu->cpu);
     for (int i = 0; i < cycles; i++) {
-      ppu_tick(emu);
+      ppu_tick(emu->ppu);
     }
     // YOU SHOULD PROFILE WHY THIS IS SO SLOW
     while (SDL_PollEvent(&e) != 0) {
