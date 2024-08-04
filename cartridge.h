@@ -2,7 +2,6 @@
 #ifndef CARTRIDGE_H
 #define CARTRIDGE_H
 #include "cpu.h"
-#include "ppu.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>

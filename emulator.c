@@ -10,7 +10,7 @@ struct emulator *emu_build(char *filename) {
   emu->cpu = cpu_build();
   emu->ppu = ppu_build();
   emu->cart = cart_build(filename);
-  emu->bus = bus_build(emu);
+  emu->bus = bus_build(emu); 
   if (emu->cpu == NULL) {
     printf("ERROR BUILDING CPU\n");
     return NULL;

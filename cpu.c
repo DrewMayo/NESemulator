@@ -21,27 +21,23 @@ struct instruction *create_opcodes();
 uint8_t cpu_run(struct cpu_6502 *const cpu) {
   uint8_t cycles = 0;
   // check for non-maskable interrupt coming from the PPU
-  static struct instruction *instr;
   const uint8_t opcode = bus_read(cpu->bus, cpu->PC, CPUMEM);
-  if (unlikely(instr == NULL)) {
-    instr = create_opcodes();
-  }
-  cycles += instr[opcode].cycles;
+  cycles += cpu->instr[opcode].cycles;
   // run the output
-  testCpuPart(*cpu, instr[opcode]);
-  assert(instr[opcode].fp_instruction != NULL);
-  /*if (instr[opcode].fp_instruction == NULL) {
-    return 0;
-  }*/
-  cycles += instr[opcode].fp_instruction(instr[opcode].addr_mode, cpu);
+  testCpuPart(*cpu, cpu->instr[opcode]);
+  //assert(cpu->instr[opcode].fp_instruction != NULL);
+  /* if (cpu->instr[opcode].fp_instruction == NULL) {
+     return 0;
+   }*/
+  cycles += cpu->instr[opcode].fp_instruction(cpu->instr[opcode].addr_mode, cpu);
   cpu->PC++;
   cpu->cycles += cycles;
 
   // handle interrupts in phase 2
   cycles += IRQ(cpu);
-  if (cpu->memory[0x2000] & BIT7 && cpu->memory[0x2002] & BIT7 && cpu->interrupt_state == INONMASKABLE) {
+  if (cpu->interrupt_state == INONMASKABLE) {
+    printf("here\n");
     cycles += NMI(cpu);
-    printf("NMI\n");
     cpu->interrupt_state = NOINTERRUPT;
   }
   return cycles;
@@ -49,6 +45,7 @@ uint8_t cpu_run(struct cpu_6502 *const cpu) {
 
 struct cpu_6502 *cpu_build() {
   struct cpu_6502 *cpu = (struct cpu_6502 *)malloc(sizeof(struct cpu_6502));
+  cpu->instr = create_opcodes();
   for (int i = 0; i < 0xFFFF; i++) {
     cpu->memory[i] = 0;
   }

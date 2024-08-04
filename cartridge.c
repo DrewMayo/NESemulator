@@ -1,6 +1,7 @@
 #include "cartridge.h"
 #include "bitmask.h"
 #include "emulator.h"
+#include <SDL2/SDL_timer.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -43,7 +44,7 @@ struct cartridge *cart_build(const char *filename) {
   switch (cart->mapper) {
   case 0: {
     fread(cart->prg_rom, sizeof(uint8_t), PRG_ROM_SIZE * cart->header[4], fp);
-    fread(cart->chr_rom, sizeof(uint8_t), CHR_ROM_SIZE, fp);
+    fread(cart->chr_rom, sizeof(uint8_t), CHR_ROM_SIZE * cart->header[5], fp);
   }
   }
   fclose(fp);
@@ -88,10 +89,10 @@ uint8_t cart_read_chr_memory(struct cartridge *cart, uint16_t mem_location) {
   return 0;
 }
 void cart_write_chr_memory(struct cartridge *cart, uint16_t mem_location, uint8_t value) {
-  switch(cart->mapper) {
-    case 0: {
-      cart->chr_rom[mem_location] = value;
-    }
+  switch (cart->mapper) {
+  case 0: {
+    cart->chr_rom[mem_location] = value;
+  }
   }
 }
 

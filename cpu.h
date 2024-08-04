@@ -28,14 +28,15 @@ enum intrpt_states {
 };
 
 struct cpu_6502 {
+  struct status_reg SR; // status register
   uint8_t AC;           // Accumulator Register
   uint8_t X;            // X register
   uint8_t Y;            // Y register
   uint8_t SP;           // stack pointer from $0100 to $01FF
-  struct status_reg SR; // status register
   uint16_t PC;          // Program Counter
   int cycles;
   uint8_t memory[65536];
+  struct instruction *instr;
   enum intrpt_states interrupt_state;
   struct Bus *bus;
 };

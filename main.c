@@ -1,6 +1,5 @@
 #include "cartridge.h"
 #include "emulator.h"
-#include "nessdl.h"
 #include "ppu.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_timer.h>
@@ -16,9 +15,8 @@ int main(int argc, char *argv[]) {
   if (emu == NULL) {
     return -2;
   }
-  struct nsdl_manager *manager = start_window();
   // running
-  // emu->cpu->PC = 0xC000;
+  //  emu->cpu->PC = 0xC000;
   bool quit = false;
   SDL_Event e;
   while (!quit) {
@@ -32,8 +30,6 @@ int main(int argc, char *argv[]) {
         quit = true;
       }
     }
-    SDL_RenderClear(manager->renderer);
-    SDL_RenderPresent(manager->renderer);
   }
   destroy_window();
   cart_delete(emu->cart);
