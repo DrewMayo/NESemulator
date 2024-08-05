@@ -13,8 +13,6 @@
 #define PPU_HEIGHT 262
 
 void render_ppu_scanline(struct ppu_2C02 *const ppu);
-void ppu_read_cpu(struct ppu_2C02 *const ppu);
-void ppu_write_cpu(const struct ppu_2C02 *const ppu);
 void ppu_run(struct ppu_2C02 *const ppu);
 SDL_Texture *nsdl_create_texture(struct nsdl_manager *manager);
 void nsdl_update_texture(struct nsdl_manager *manager, uint32_t *rgba_arr);
@@ -32,7 +30,7 @@ void ppu_tick(struct ppu_2C02 *const ppu) {
   static uint8_t attribute_table;
   static uint16_t pattern_table_lower;
   static uint16_t pattern_table_upper;
-  if ((ppu->scanline > 0 && ppu->scanline < 240) || ppu->scanline == 261) {
+  if ((ppu->scanline < 240) || ppu->scanline == 261) {
     if (ppu->cycles == 0 && ppu->PPUMASK & 0b00110000) {
     } else if ((ppu->cycles > 1 && ppu->cycles < 258) || (ppu->cycles > 320 && ppu->cycles < 338)) {
       // this is relative
@@ -54,10 +52,10 @@ void ppu_tick(struct ppu_2C02 *const ppu) {
         break;
       }
       case 7: {
-        if (ppu->PPUMASK & RENDERON) {
-          coarse_x_increment(ppu);
+        coarse_x_increment(ppu);
+        if (!(ppu->cycles == 256 || ppu->cycles == 248 || (ppu->scanline == 239 && (ppu->cycles == 328 || ppu->cycles == 336) || (ppu->cycles < 328 && ppu->scanline == 261)))) {
+          populate_frame(ppu, name_table, attribute_table, pattern_table_lower, pattern_table_upper);
         }
-        populate_frame(ppu, name_table, attribute_table, pattern_table_lower, pattern_table_upper);
         break;
       }
       }
@@ -265,7 +263,7 @@ uint32_t findPixel(struct ppu_2C02 *const ppu, uint8_t value, uint8_t x, uint8_t
   uint32_t final_value = 0;
   // Check which nametable half (left/right)
   low_addr |= (ppu->PPUCTRL & BIT4) << 12;
-  // index the value in the attribute table
+  // index the value in the pattern table
   low_addr |= ((uint16_t)value) << 4;
   // get the fine y coordinate
   low_addr |= y & 0b00000111;
@@ -274,7 +272,7 @@ uint32_t findPixel(struct ppu_2C02 *const ppu, uint8_t value, uint8_t x, uint8_t
   lower_value = bus_read(ppu->bus, low_addr, PPUMEM);
   // shift to proper pos
   upper_value = (((upper_value << x) & BIT7) >> 6);
-  lower_value = (((upper_value << x) & BIT7) >> 7);
+  lower_value = (((lower_value << x) & BIT7) >> 7);
   final_value = upper_value + lower_value;
   // temp - find color
   switch (final_value) {
@@ -292,33 +290,35 @@ uint32_t findPixel(struct ppu_2C02 *const ppu, uint8_t value, uint8_t x, uint8_t
 
 void populate_frame(struct ppu_2C02 *const ppu, const uint8_t nametable, const uint8_t attribute_table, const uint16_t pattern_table_lower, const uint16_t pattern_table_upper) {
   static uint32_t pixels[WINDOW_AREA];
-  static uint32_t offset;
+  static uint32_t offset = 0;
   uint8_t value = 0;
   uint32_t color = 0;
-  if (offset < WINDOW_AREA) {
-    for (int i = 0; i < 8; i++) {
-      value = (((pattern_table_upper << i) & BIT7) >> 6) + (((pattern_table_lower << i) & BIT7) >> 7);
-      switch (value) {
-      case 0:
-        color = 0x0000000A;
-        break;
-      case 1:
-        color = 0x00FF00DE;
-        break;
-      case 2:
-        color = 0xFF00FFFF;
-        break;
-      case 3:
-        color = 0xFFFFFFFF;
-        break;
-      }
-      pixels[offset + i] = color;
-    }
-    offset += 8;
-  } else {
-    nsdl_update_texture(ppu->nsdl, pixels);
+  //printf("scanline: %d, cycle: %d, offset: %d\n ", ppu->scanline, ppu->cycles, offset);
+  if (offset == WINDOW_AREA) {
+    // nsdl_update_texture(ppu->nsdl, pixels);
     offset = 0;
   }
+  // printf("nametable: 0x%X, attribute_table: 0x%X, pattern_table_lower: 0x%X, pattern_table_upper: 0x%X\n", nametable, attribute_table, pattern_table_lower, pattern_table_upper);
+  for (int i = 0; i < 8; i++) {
+    value = (((pattern_table_upper << i) & BIT7) >> 6) + (((pattern_table_lower << i) & BIT7) >> 7);
+    switch (value) {
+    case 0:
+      color = 0x000000FF;
+      break;
+    case 1:
+      color = 0x00FF00FF;
+      break;
+    case 2:
+      color = 0xFF00FFFF;
+      break;
+    case 3:
+      color = 0xFFFFFFFF;
+      break;
+    }
+    pixels[offset + i] = color;
+  }
+  offset += 8;
+  nsdl_update_texture(ppu->nsdl, pixels);
 }
 
 void ppu_create_screen(struct ppu_2C02 *const ppu) {

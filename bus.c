@@ -45,7 +45,7 @@ void bus_write(struct Bus *const bus, uint16_t addr, const uint8_t value, const 
     break;
 
   case PPUMEM: {
-    addr &= 0x3FFF;
+    // addr &= 0x3FFF;
     if (addr <= 0x1FFF) {
       // CHR-ROM
       bus_write(bus, addr, value, CHRCARTMEM);
@@ -103,13 +103,13 @@ uint8_t bus_read(struct Bus *const bus, uint16_t addr, const enum Memtype memtyp
     return bus->cpu->memory[addr];
   }
   case PPUMEM: {
-    addr &= 0x3FFF;
+    // addr &= 0x3FFF;
     if (addr <= 0x1FFF) {
       // CHR-ROM
       return bus_read(bus, addr, CHRCARTMEM);
     } else if (addr >= 0x2000 && addr <= 0x2FFF) {
       // INTERNAL VRAM 2 KiB
-      // addr = calculate_mirror_addr(bus, addr);
+      addr = calculate_mirror_addr(bus, addr);
       return bus->ppu->memory[addr];
     } else if (addr >= 0x3000 && addr <= 0x3EFF) {
       // UNUSED
