@@ -45,24 +45,29 @@ void bus_write(struct Bus *const bus, uint16_t addr, const uint8_t value, const 
     break;
 
   case PPUMEM: {
-    // addr &= 0x3FFF;
+    addr &= 0x3FFF;
     if (addr <= 0x1FFF) {
       // CHR-ROM
-      bus_write(bus, addr, value, CHRCARTMEM);
+      //      bus_write(bus, addr, value, CHRCARTMEM);
     } else if (addr >= 0x2000 && addr <= 0x2FFF) {
       // INTERNAL VRAM 2 KiB
+      // printf("Address before: 0x%X\n", addr);
       addr = calculate_mirror_addr(bus, addr);
+      // printf("Address: 0x%X, Value: 0x%X\n", addr, value);
       bus->ppu->memory[addr] = value;
       break;
     } else if (addr >= 0x3000 && addr <= 0x3EFF) {
       // UNUSED
       addr %= 0x0400 + 0x2000;
+      bus_write(bus, addr, value, PPUMEM);
     } else if (addr >= 0x3F00 && addr <= 0x3F1F) {
       // INTERNAL PALLETE RAM bus->ppu->memory[addr] = value;
       break;
     } else if (addr >= 0x3F20 && addr <= 0x3FFF) {
       addr %= 0x0020 + 0x3F00;
+      // bus_write(bus, addr, value, PPUMEM);
     }
+    //    bus_write(bus,addr, value, PPUMEM);
     break;
   }
   case PRGCARTMEM:
@@ -103,7 +108,7 @@ uint8_t bus_read(struct Bus *const bus, uint16_t addr, const enum Memtype memtyp
     return bus->cpu->memory[addr];
   }
   case PPUMEM: {
-    // addr &= 0x3FFF;
+    addr &= 0x3FFF;
     if (addr <= 0x1FFF) {
       // CHR-ROM
       return bus_read(bus, addr, CHRCARTMEM);
@@ -133,14 +138,14 @@ uint8_t bus_read(struct Bus *const bus, uint16_t addr, const enum Memtype memtyp
 }
 
 uint16_t calculate_mirror_addr(const struct Bus *const bus, uint16_t addr) {
-  if (bus->cart->mirror == VERTICAL) {
-    addr = addr % 0x0800 + 0x2000;
-  } else if (bus->cart->mirror == HORIZONTAL) {
+  if (bus->cart->mirror == HORIZONTAL) {
     if (addr < 0x2800) {
-      addr = addr % 0x0400 + 0x2000;
+      addr = (addr - 0x2000) % 0x400;
     } else {
-      addr = addr % 0x0400 + 0x2800;
+      addr = (addr - 0x2000) % 0x400 + 0x400;
     }
+  } else if (bus->cart->mirror == VERTICAL) {
+    addr = (addr - 0x2000) % 0x800;
   }
   return addr;
 }

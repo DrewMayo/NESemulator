@@ -30,5 +30,8 @@ void testCpuPart(const struct cpu_6502 cpu, const struct instruction instr) {
   }
   printf("  ");
   printf("%s ", instr.name);
-  printf("A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%d\n", cpu.AC, cpu.X, cpu.Y, cpu_combine_SR(cpu.SR), cpu.SP, cpu.cycles);
+  printf("A:%02X X:%02X Y:%02X P:%02X SP:%02X PPU:%3d,%3d CYC:%d\n", cpu.AC, cpu.X, cpu.Y, cpu_combine_SR(cpu.SR),
+         cpu.SP, cpu.bus->ppu->scanline, cpu.bus->ppu->cycles, cpu.cycles);
+  // printf("A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%d\n", cpu.AC, cpu.X, cpu.Y, cpu_combine_SR(cpu.SR), cpu.SP,
+  //        cpu.cycles);
 }

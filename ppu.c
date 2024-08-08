@@ -2,15 +2,13 @@
 #include "bitmask.h"
 #include "bus.h"
 #include "cartridge.h"
+#include "cpu.h"
 #include "emulator.h"
 #include <SDL2/SDL_pixels.h>
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_timer.h>
 #include <stdint.h>
 #include <sys/types.h>
-
-#define PPU_WIDTH 341
-#define PPU_HEIGHT 262
 
 void render_ppu_scanline(struct ppu_2C02 *const ppu);
 void ppu_run(struct ppu_2C02 *const ppu);
@@ -22,17 +20,32 @@ void ppu_create_screen(struct ppu_2C02 *const ppu);
 void coarse_x_increment(struct ppu_2C02 *const ppu);
 void y_increment(struct ppu_2C02 *const ppu);
 void ppudata_update_v(struct ppu_2C02 *const ppu);
-void populate_frame(struct ppu_2C02 *const ppu, const uint8_t nametable, const uint8_t attribute_table, const uint16_t pattern_table_lower, const uint16_t pattern_table_uppera);
+void populate_frame(struct ppu_2C02 *const ppu, const uint16_t pattern_table_lower, const uint16_t pattern_table_upper);
 
 void ppu_tick(struct ppu_2C02 *const ppu) {
-  static uint32_t pixels[WINDOW_AREA];
   static uint8_t name_table;
   static uint8_t attribute_table;
   static uint16_t pattern_table_lower;
   static uint16_t pattern_table_upper;
+  static uint16_t counter = 0;
+  static uint8_t old_ppu_status = 0;
+  static uint8_t old_ppu_ctrl = 0;
+  static bool nmi_high = false;
+  if ((old_ppu_status & BIT7) != (ppu->PPUSTATUS & BIT7)) {
+    nmi_high = true;
+    old_ppu_status = ppu->PPUSTATUS;
+  }
+  if ((old_ppu_ctrl & BIT7) != (ppu->PPUCTRL & BIT7)) {
+    nmi_high = true;
+    old_ppu_ctrl = ppu->PPUCTRL;
+  }
+  // printf("PPU->PPUSTATUS: 0x%X, PPU->PPUCTRL: 0x%X\n", ppu->PPUSTATUS, ppu->PPUCTRL);
+  if (ppu->PPUSTATUS & ppu->PPUCTRL & BIT7 && nmi_high) {
+    ppu->bus->cpu->interrupt_state = INONMASKABLE;
+    nmi_high = false;
+  }
   if ((ppu->scanline < 240) || ppu->scanline == 261) {
-    if (ppu->cycles == 0 && ppu->PPUMASK & 0b00110000) {
-    } else if ((ppu->cycles > 1 && ppu->cycles < 258) || (ppu->cycles > 320 && ppu->cycles < 338)) {
+    if ((ppu->cycles > 1 && ppu->cycles < 258) || (ppu->cycles > 320 && ppu->cycles < 338)) {
       // this is relative
       switch ((ppu->cycles - 1) % 8) {
       case 0: {
@@ -40,22 +53,27 @@ void ppu_tick(struct ppu_2C02 *const ppu) {
         break;
       }
       case 2: {
-        attribute_table = bus_read(ppu->bus, 0x23C0 | (ppu->V & 0x0C00) | ((ppu->V >> 4) & 0x38) | ((ppu->V >> 2) & 0x07), PPUMEM);
+        attribute_table =
+            bus_read(ppu->bus, 0x23C0 | (ppu->V & 0x0C00) | ((ppu->V >> 4) & 0x38) | ((ppu->V >> 2) & 0x07), PPUMEM);
         break;
       }
       case 4: {
-        pattern_table_lower = bus_read(ppu->bus, (ppu->PPUCTRL & BIT4) << 12 | name_table << 4 | (ppu->V & 0x7000) >> 12, PPUMEM);
+        pattern_table_lower =
+            bus_read(ppu->bus, ((ppu->PPUCTRL & BIT4) << 12) | (name_table << 4) | ((ppu->V & 0x7000) >> 12), PPUMEM);
         break;
       }
       case 6: {
-        pattern_table_upper = bus_read(ppu->bus, ((ppu->PPUCTRL & BIT4) << 12 | name_table << 4 | (((ppu->V & 0x7000) >> 12))) + 0x08, PPUMEM);
+        pattern_table_upper = bus_read(
+            ppu->bus, (((ppu->PPUCTRL & BIT4) << 12) | (name_table << 4) | (((ppu->V & 0x7000) >> 12) + 0x08)), PPUMEM);
         break;
       }
       case 7: {
-        coarse_x_increment(ppu);
-        if (!(ppu->cycles == 256 || ppu->cycles == 248 || (ppu->scanline == 239 && (ppu->cycles == 328 || ppu->cycles == 336) || (ppu->cycles < 328 && ppu->scanline == 261)))) {
-          populate_frame(ppu, name_table, attribute_table, pattern_table_lower, pattern_table_upper);
+        if (!(ppu->cycles == 256 || ppu->cycles == 248 ||
+              (ppu->scanline == 239 && (ppu->cycles == 328 || ppu->cycles == 336)) ||
+              (ppu->cycles < 328 && ppu->scanline == 261))) {
+          populate_frame(ppu, pattern_table_lower, pattern_table_upper);
         }
+        coarse_x_increment(ppu);
         break;
       }
       }
@@ -67,26 +85,27 @@ void ppu_tick(struct ppu_2C02 *const ppu) {
         ppu->V &= ~REGISTERX;
         ppu->V |= (ppu->T & REGISTERX);
       }
-      if (ppu->cycles > 279 && ppu->cycles < 305 && (ppu->PPUMASK & RENDERON) && ppu->scanline == 261) {
+      if (ppu->cycles > 279 && ppu->cycles < 305 && ppu->scanline == 261 && (ppu->PPUMASK & RENDERON)) {
         // coarse y and nametable y
-        ppu->V = (ppu->V & ~REGISTERY) + (ppu->T & REGISTERY);
+        ppu->V &= ~REGISTERY;
+        ppu->V |= ppu->T & REGISTERY;
       }
-      if (ppu->cycles == 1 && ppu->scanline == 261) {
-        ppu->PPUSTATUS &= 0x7F;
-      }
+    } else if (ppu->cycles == 1 && ppu->scanline == 261) {
+      ppu->PPUSTATUS &= 0x7F;
     }
   } else if (ppu->scanline == 241 && ppu->cycles == 1) {
-    ppu->PPUSTATUS |= 0x80;
-    ppu->bus->cpu->interrupt_state = INONMASKABLE;
+    ppu->PPUSTATUS |= BIT7;
   }
   if (ppu->cycles == 340 || (ppu->cycles == 339 && !ppu->is_even_frame && ppu->PPUMASK & RENDERON)) {
     ppu->scanline++;
     if (ppu->scanline == 262) {
       ppu->scanline = 0;
+      // ppu_create_screen(ppu);
     }
     ppu->cycles = 0;
     // DON'T INCREMENT
     ppu->is_even_frame = !ppu->is_even_frame;
+    // ppu_create_screen(ppu);
     return;
   }
   ppu->cycles++;
@@ -98,17 +117,14 @@ void ppu_tick(struct ppu_2C02 *const ppu) {
 // **********************
 
 void ppuctrl_write(struct ppu_2C02 *const ppu, const uint8_t value) {
+  printf("value: 0x%X\n", value);
   ppu->T = (ppu->T & 0b1111001111111111) + ((((uint16_t)value) & 0b00000011) << 10);
   ppu->PPUCTRL = value;
 }
 
-void ppumask_write(struct ppu_2C02 *const ppu, const uint8_t value) {
-  ppu->PPUMASK = value;
-}
+void ppumask_write(struct ppu_2C02 *const ppu, const uint8_t value) { ppu->PPUMASK = value; }
 // note: normal writes in the 2C02 corrupt the oamdata but not
-void oamaddr_write(struct ppu_2C02 *const ppu, const uint8_t value) {
-  ppu->OAMADDR = value;
-}
+void oamaddr_write(struct ppu_2C02 *const ppu, const uint8_t value) { ppu->OAMADDR = value; }
 
 void oamdata_write(struct ppu_2C02 *const ppu, const uint8_t value) {
   ppu->OAMDATA = value;
@@ -116,9 +132,7 @@ void oamdata_write(struct ppu_2C02 *const ppu, const uint8_t value) {
 }
 // This function is not finished and needs to be fixed
 // but is ommited for the time being
-void oamdma_write(struct ppu_2C02 *const ppu, const uint8_t value) {
-  ppu->OAMDMA = value;
-}
+void oamdma_write(struct ppu_2C02 *const ppu, const uint8_t value) { ppu->OAMDMA = value; }
 
 void ppuscroll_write(struct ppu_2C02 *const ppu, const uint8_t value) {
   if (!ppu->W) {
@@ -126,8 +140,8 @@ void ppuscroll_write(struct ppu_2C02 *const ppu, const uint8_t value) {
     ppu->X = value & 0b00000111;
     ppu->W = 1;
   } else {
-    ppu->T = (ppu->T & 0b1000110000011111) + ((uint16_t)(value & 0b00000111) << 13);
-    ppu->T = (ppu->T & 0b1000110000011111) + ((uint16_t)(value & 0b11111000) << 2);
+    ppu->T =
+        (ppu->T & 0b1000110000011111) | ((uint16_t)(value & 0b00000111) << 13) | ((uint16_t)(value & 0b11111000) << 2);
     // not in spec but this is supposed to be 15bit
     ppu->T = ppu->T & 0x7FFF;
     ppu->W = 0;
@@ -138,17 +152,19 @@ void ppuscroll_write(struct ppu_2C02 *const ppu, const uint8_t value) {
 void ppuaddr_write(struct ppu_2C02 *const ppu, const uint8_t value) {
   if (!ppu->W) {
     ppu->T = (ppu->T & 0b1100000011111111) + ((((uint16_t)value) & 0b00111111) << 8);
-    ppu->T = ppu->T & 0b0011111111111111;
+    ppu->T = ppu->T & 0x3FFF;
     ppu->W = 1;
   } else {
-    ppu->T = (ppu->T & 0xFF00) + value;
-    ppu->T &= 0x7FFF;
+    ppu->T = (ppu->T & 0xFF00) | value;
     ppu->V = ppu->T;
     ppu->W = 0;
   }
 }
 void ppudata_write(struct ppu_2C02 *const ppu, const uint8_t value) {
   // if is rendering
+  if (ppu->V >= 0x2000 && ppu->V <= 0x2FFF) {
+    printf("write to: 0x%X\n", ppu->V);
+  }
   bus_write(ppu->bus, ppu->V, value, PPUMEM);
   ppu->PPUDATA = value;
   ppudata_update_v(ppu);
@@ -160,17 +176,17 @@ void ppudata_write(struct ppu_2C02 *const ppu, const uint8_t value) {
 
 uint8_t ppustatus_read(struct ppu_2C02 *const ppu) {
   const uint8_t return_val = ppu->PPUSTATUS;
-  ppu->PPUSTATUS &= 0b01111111;
+  ppu->PPUSTATUS &= ~BIT7;
   ppu->W = 0;
   return return_val;
 }
 
-uint8_t oamdata_read(struct ppu_2C02 *const ppu) {
-  return bus_read(ppu->bus, ppu->OAMADDR, PPUMEM);
-}
+uint8_t oamdata_read(struct ppu_2C02 *const ppu) { return bus_read(ppu->bus, ppu->OAMADDR, PPUMEM); }
 
 uint8_t ppudata_read(struct ppu_2C02 *const ppu) {
-  const uint8_t return_val = bus_read(ppu->bus, ppu->V, PPUMEM);
+  static uint8_t buffer = 0;
+  const uint8_t return_val = buffer;
+  buffer = bus_read(ppu->bus, ppu->V, PPUMEM);
   ppudata_update_v(ppu);
   return return_val;
 }
@@ -180,23 +196,17 @@ uint8_t ppudata_read(struct ppu_2C02 *const ppu) {
 // ***********************
 
 void ppudata_update_v(struct ppu_2C02 *const ppu) {
-  /*  if (ppu->PPUMASK & 0b000110000) {
-      if (ppu->scanline < 240 || ppu->scanline == 261) {
-        coarse_x_increment(ppu);
-        y_increment(ppu);
-      }
-    } else {
-    */
-  if (ppu->PPUCTRL & BIT2) {
+  if ((ppu->PPUCTRL & BIT2)) {
     ppu->V += 32;
   } else {
     ppu->V += 1;
   }
 }
-//}
 
 // copied from: https://www.nesdev.org/wiki/PPU_scrolling#Coarse_X_increment
 void coarse_x_increment(struct ppu_2C02 *const ppu) {
+  // printf("scanline: %d, cycle: %d, ppu->V: 0x%4X, counter: %d\n", ppu->scanline, ppu->cycles,
+  //       0x2000 | (ppu->V & 0x0FFF), counter);
   if ((ppu->V & 0x001F) == 31) { // if course X == 31
     ppu->V &= ~0x001F;           // coarse X = 0
     ppu->V ^= 0x0400;            // Switch horizontal nametable
@@ -241,11 +251,11 @@ void scanline_check(struct ppu_2C02 *const ppu) {
 
 struct ppu_2C02 *ppu_build() {
   struct ppu_2C02 *ppu = (struct ppu_2C02 *)malloc(sizeof(struct ppu_2C02));
-  for (int i = 0; i < 0xFFFF; i++) {
+  for (int i = 0; i < 0x0800; i++) {
     ppu->memory[i] = 0;
   }
-  ppu->scanline = 261;
-  ppu->cycles = 0;
+  ppu->scanline = 0;
+  ppu->cycles = 21;
   ppu->X = 0;
   ppu->W = false;
   ppu->T = 0;
@@ -279,28 +289,41 @@ uint32_t findPixel(struct ppu_2C02 *const ppu, uint8_t value, uint8_t x, uint8_t
   case 0:
     return 0x0000000A;
   case 1:
-    return 0x00FF00DE;
+    return 0x00FF000E;
   case 2:
-    return 0xFF00FFFF;
+    return 0x00FFFFFF;
   case 3:
     return 0xFFFFFFFF;
   }
   return 0;
 }
 
-void populate_frame(struct ppu_2C02 *const ppu, const uint8_t nametable, const uint8_t attribute_table, const uint16_t pattern_table_lower, const uint16_t pattern_table_upper) {
+void populate_frame(struct ppu_2C02 *const ppu, const uint16_t pattern_table_lower,
+                    const uint16_t pattern_table_upper) {
   static uint32_t pixels[WINDOW_AREA];
   static uint32_t offset = 0;
   uint8_t value = 0;
   uint32_t color = 0;
-  //printf("scanline: %d, cycle: %d, offset: %d\n ", ppu->scanline, ppu->cycles, offset);
+  // printf("scanline: %d, cycle: %d, offset: %d\n ", ppu->scanline, ppu->cycles, offset);
   if (offset == WINDOW_AREA) {
-    // nsdl_update_texture(ppu->nsdl, pixels);
+    nsdl_update_texture(ppu->nsdl, pixels);
     offset = 0;
+    printf("vram:\n");
+    for (int i = 0; i < 0x800; i++) {
+      printf("%2X ", ppu->memory[i]);
+      if (i % 32 == 0) {
+        printf("\n");
+      }
+      if (i % 0x400 == 0) {
+        printf("\n");
+      }
+    }
+    printf("\n");
   }
-  // printf("nametable: 0x%X, attribute_table: 0x%X, pattern_table_lower: 0x%X, pattern_table_upper: 0x%X\n", nametable, attribute_table, pattern_table_lower, pattern_table_upper);
+  // printf("nametable: 0x%X, attribute_table: 0x%X, pattern_table_lower: 0x%X, pattern_table_upper: 0x%X\n", nametable,
+  // attribute_table, pattern_table_lower, pattern_table_upper);
   for (int i = 0; i < 8; i++) {
-    value = (((pattern_table_upper << i) & BIT7) >> 6) + (((pattern_table_lower << i) & BIT7) >> 7);
+    value = ((((uint16_t)pattern_table_upper << i) & BIT7) >> 6) | ((((uint16_t)pattern_table_lower << i) & BIT7) >> 7);
     switch (value) {
     case 0:
       color = 0x000000FF;
@@ -312,13 +335,13 @@ void populate_frame(struct ppu_2C02 *const ppu, const uint8_t nametable, const u
       color = 0xFF00FFFF;
       break;
     case 3:
-      color = 0xFFFFFFFF;
+      color = 0xFFFFFF0A;
       break;
     }
     pixels[offset + i] = color;
   }
   offset += 8;
-  nsdl_update_texture(ppu->nsdl, pixels);
+  // nsdl_update_texture(ppu->nsdl, pixels);
 }
 
 void ppu_create_screen(struct ppu_2C02 *const ppu) {
@@ -331,12 +354,7 @@ void ppu_create_screen(struct ppu_2C02 *const ppu) {
     uint8_t value = bus_read(ppu->bus, addr + tile, PPUMEM);
     for (int i = 0; i < 8; i++) {
       for (int j = 0; j < 8; j++) {
-        // pixels[pixel_addr + i * WINDOW_WIDTH + j] = findPixel(ppu, value, j, i);
-        if (value != 0x24) {
-          pixels[pixel_addr + i * WINDOW_WIDTH + j] = 0xFF0000FF;
-        } else {
-          pixels[pixel_addr + i * WINDOW_WIDTH + j] = 0;
-        }
+        pixels[pixel_addr + i * WINDOW_WIDTH + j] = findPixel(ppu, value, j, i);
       }
     }
     if (offset_x == 31) {
@@ -356,12 +374,8 @@ void ppu_create_screen(struct ppu_2C02 *const ppu) {
  */
 
 SDL_Texture *nsdl_create_texture(struct nsdl_manager *manager) {
-  SDL_Texture *texture = SDL_CreateTexture(
-      manager->renderer,
-      SDL_PIXELFORMAT_RGBA32,
-      SDL_TEXTUREACCESS_STREAMING,
-      WINDOW_WIDTH,
-      WINDOW_HEIGHT);
+  SDL_Texture *texture = SDL_CreateTexture(manager->renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING,
+                                           WINDOW_WIDTH, WINDOW_HEIGHT);
   if (texture == NULL) {
     return NULL;
   }
@@ -400,13 +414,8 @@ struct nsdl_manager *start_window() {
   struct nsdl_manager *manager = malloc(sizeof(struct nsdl_manager));
 
   // create the window and check for errors
-  manager->window = SDL_CreateWindow(
-      "NES Emulator",
-      SDL_WINDOWPOS_UNDEFINED,
-      SDL_WINDOWPOS_UNDEFINED,
-      WINDOW_WIDTH,
-      WINDOW_HEIGHT,
-      SDL_WINDOW_RESIZABLE);
+  manager->window = SDL_CreateWindow("NES Emulator", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, WINDOW_WIDTH,
+                                     WINDOW_HEIGHT, SDL_WINDOW_RESIZABLE);
 
   if (manager->window == NULL) {
     SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Could not create the window: %s\n", SDL_GetError());

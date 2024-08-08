@@ -20,26 +20,27 @@ struct instruction *create_opcodes();
 
 uint8_t cpu_run(struct cpu_6502 *const cpu) {
   uint8_t cycles = 0;
+  cycles += IRQ(cpu);
+  if (cpu->interrupt_state == INONMASKABLE) {
+    cycles += NMI(cpu);
+    printf("NMI\n");
+    cpu->interrupt_state = NOINTERRUPT;
+    return cycles;
+  }
   // check for non-maskable interrupt coming from the PPU
   const uint8_t opcode = bus_read(cpu->bus, cpu->PC, CPUMEM);
   cycles += cpu->instr[opcode].cycles;
   // run the output
   testCpuPart(*cpu, cpu->instr[opcode]);
-  assert(cpu->instr[opcode].fp_instruction != NULL);
-  /* if (cpu->instr[opcode].fp_instruction == NULL) {
-     return 0;
-   }*/
+  // assert(cpu->instr[opcode].fp_instruction != NULL);
+  if (cpu->instr[opcode].fp_instruction == NULL) {
+    return 0;
+  }
   cycles += cpu->instr[opcode].fp_instruction(cpu->instr[opcode].addr_mode, cpu);
   cpu->PC++;
   cpu->cycles += cycles;
 
   // handle interrupts in phase 2
-  cycles += IRQ(cpu);
-  if (cpu->interrupt_state == INONMASKABLE) {
-    printf("here\n");
-    cycles += NMI(cpu);
-    cpu->interrupt_state = NOINTERRUPT;
-  }
   return cycles;
 }
 
@@ -58,7 +59,8 @@ void cpu_reset(struct cpu_6502 *cpu) {
   cpu->Y = 0;
   cpu->SP = 0xFD;
   cpu_expand_SR(cpu, 0x24);
-  cpu->PC = (((uint16_t)(bus_read(cpu->bus, 0xFFFD, CPUMEM)) << 8) & 0xFF00) + ((uint16_t)(bus_read(cpu->bus, 0xFFFC, CPUMEM)));
+  cpu->PC = (((uint16_t)(bus_read(cpu->bus, 0xFFFD, CPUMEM)) << 8) & 0xFF00) +
+            ((uint16_t)(bus_read(cpu->bus, 0xFFFC, CPUMEM)));
   cpu->cycles = 7;
 }
 
@@ -69,7 +71,8 @@ uint8_t NMI(struct cpu_6502 *cpu) {
   cpu->SP--;
   bus_write(cpu->bus, cpu->SP + 0x0100, cpu_combine_SR(cpu->SR), CPUMEM);
   cpu->SP--;
-  cpu->PC = (((uint16_t)(bus_read(cpu->bus, 0xFFFB, CPUMEM)) << 8) & 0xFF00) + ((uint16_t)(bus_read(cpu->bus, 0xFFFA, CPUMEM)));
+  cpu->PC = (((uint16_t)(bus_read(cpu->bus, 0xFFFB, CPUMEM)) << 8) & 0xFF00) +
+            ((uint16_t)(bus_read(cpu->bus, 0xFFFA, CPUMEM)));
   cpu->SR.Break = 0;
   cpu->SR.Interrupt = 1;
   return 7;
@@ -83,7 +86,8 @@ uint8_t IRQ(struct cpu_6502 *cpu) {
     cpu->SP--;
     bus_write(cpu->bus, cpu->SP + 0x0100, cpu_combine_SR(cpu->SR), CPUMEM);
     cpu->SP--;
-    cpu->PC = (((uint16_t)(bus_read(cpu->bus, 0xFFFF, CPUMEM)) << 8) & 0xFF00) + ((uint16_t)(bus_read(cpu->bus, 0xFFFE, CPUMEM)));
+    cpu->PC = (((uint16_t)(bus_read(cpu->bus, 0xFFFF, CPUMEM)) << 8) & 0xFF00) +
+              ((uint16_t)(bus_read(cpu->bus, 0xFFFE, CPUMEM)));
     cpu->SR.Break = 0;
     cpu->SR.Interrupt = 1;
     return 7;
@@ -226,7 +230,8 @@ uint8_t BRK(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   cpu->SP--;
   bus_write(cpu->bus, cpu->SP + 0x0100, cpu_combine_SR(cpu->SR), CPUMEM);
   cpu->SP--;
-  cpu->PC = (((uint16_t)(bus_read(cpu->bus, 0xFFFE, CPUMEM)) << 8) & 0xFF00) + ((uint16_t)(bus_read(cpu->bus, 0xFFFF, CPUMEM)));
+  cpu->PC = (((uint16_t)(bus_read(cpu->bus, 0xFFFE, CPUMEM)) << 8) & 0xFF00) +
+            ((uint16_t)(bus_read(cpu->bus, 0xFFFF, CPUMEM)));
   cpu->SR.Break = 0;
   cpu->SR.Interrupt = 1;
   return 0;
@@ -511,14 +516,16 @@ uint8_t RTI(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
   cpu->SP++;
   cpu_expand_SR(cpu, bus_read(cpu->bus, 0x0100 + cpu->SP, CPUMEM));
-  cpu->PC = ((uint16_t)bus_read(cpu->bus, 0x0100 + cpu->SP + 2, CPUMEM) << 8) + bus_read(cpu->bus, 0x0100 + cpu->SP + 1, CPUMEM) - 1;
+  cpu->PC = ((uint16_t)bus_read(cpu->bus, 0x0100 + cpu->SP + 2, CPUMEM) << 8) +
+            bus_read(cpu->bus, 0x0100 + cpu->SP + 1, CPUMEM) - 1;
   cpu->SP += 2;
   return 0;
 }
 
 uint8_t RTS(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
-  cpu->PC = ((uint16_t)bus_read(cpu->bus, 0x0100 + cpu->SP + 2, CPUMEM) << 8) + bus_read(cpu->bus, 0x0100 + cpu->SP + 1, CPUMEM);
+  cpu->PC = ((uint16_t)bus_read(cpu->bus, 0x0100 + cpu->SP + 2, CPUMEM) << 8) +
+            bus_read(cpu->bus, 0x0100 + cpu->SP + 1, CPUMEM);
   cpu->SP += 2;
   return 0;
 }
@@ -743,9 +750,7 @@ uint8_t SRE(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
 // gets the correct cpu->memory address to be used by the corresponding opcode
 // returns a 16 bit integer containing the propper cpu->memory address
 
-bool is_page_crossed(const uint16_t addr1, const uint16_t addr2) {
-  return (addr1 & 0xFF00) != (addr2 & 0xFF00);
-}
+bool is_page_crossed(const uint16_t addr1, const uint16_t addr2) { return (addr1 & 0xFF00) != (addr2 & 0xFF00); }
 
 uint8_t page_crossed(const enum addr_mode_states addr_mode, const struct cpu_6502 *cpu, uint16_t mem_addr) {
   switch (addr_mode) {
@@ -809,25 +814,29 @@ uint16_t fetch_addr_mode(const enum addr_mode_states addr_mode, struct cpu_6502 
     break;
   }
   case ABSOLUTE: {
-    const uint16_t mem_access = bus_read(cpu->bus, cpu->PC + 1, CPUMEM) + ((uint16_t)bus_read(cpu->bus, cpu->PC + 2, CPUMEM) << 8);
+    const uint16_t mem_access =
+        bus_read(cpu->bus, cpu->PC + 1, CPUMEM) + ((uint16_t)bus_read(cpu->bus, cpu->PC + 2, CPUMEM) << 8);
     param = mem_access;
     cpu->PC += 2;
     break;
   }
   case ABSOLUTEX: {
-    const uint16_t mem_access = bus_read(cpu->bus, cpu->PC + 1, CPUMEM) + ((uint16_t)bus_read(cpu->bus, cpu->PC + 2, CPUMEM) << 8);
+    const uint16_t mem_access =
+        bus_read(cpu->bus, cpu->PC + 1, CPUMEM) + ((uint16_t)bus_read(cpu->bus, cpu->PC + 2, CPUMEM) << 8);
     param = mem_access + cpu->X;
     cpu->PC += 2;
     break;
   }
   case ABSOLUTEY: {
-    const uint16_t mem_access = bus_read(cpu->bus, cpu->PC + 1, CPUMEM) + ((uint16_t)bus_read(cpu->bus, cpu->PC + 2, CPUMEM) << 8);
+    const uint16_t mem_access =
+        bus_read(cpu->bus, cpu->PC + 1, CPUMEM) + ((uint16_t)bus_read(cpu->bus, cpu->PC + 2, CPUMEM) << 8);
     param = mem_access + cpu->Y;
     cpu->PC += 2;
     break;
   }
   case INDIRECT: {
-    const uint16_t mem_access = bus_read(cpu->bus, cpu->PC + 1, CPUMEM) + (((uint16_t)bus_read(cpu->bus, cpu->PC + 2, CPUMEM)) << 8);
+    const uint16_t mem_access =
+        bus_read(cpu->bus, cpu->PC + 1, CPUMEM) + (((uint16_t)bus_read(cpu->bus, cpu->PC + 2, CPUMEM)) << 8);
     param = ((uint16_t)bus_read(cpu->bus, mem_access + 1, CPUMEM) << 8) + bus_read(cpu->bus, mem_access, CPUMEM);
     // handle the bug in the indirect vector goes to the same
     // page when crossing the page boundry

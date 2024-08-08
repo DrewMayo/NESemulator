@@ -24,13 +24,13 @@ struct cartridge *cart_build(const char *filename) {
   cart->chr_rom = (uint8_t *)malloc(sizeof(uint8_t) * CHR_ROM_SIZE * cart->header[5]);
 
   // control byte 1, header byte 6
-  cart->mirror = cart->header[6] & BIT0 ? HORIZONTAL : VERTICAL;
+  cart->mirror = cart->header[6] & BIT0 ? VERTICAL : HORIZONTAL;
   cart->contains_pgr_ram = cart->header[6] & BIT1;
   cart->contains_trainer = cart->header[6] & BIT2;
   cart->alternate_name_table = cart->header[6] & BIT3;
   cart->mapper = (cart->header[6] >> 4) & 0x0F;
 
-  // control byte 2, header byte 7:""
+  // control byte 2, header byte 7
   cart->VS_unisystem = cart->header[7] & BIT0;
   if ((cart->header[7] & 0b00001100) >> 2 == 2) {
     cart->ines = 2;

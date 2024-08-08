@@ -22,6 +22,11 @@
 struct emulator;
 struct Bus;
 struct ppu_2C02 {
+  // internal registers
+  uint8_t X;
+  bool W;
+  uint16_t T;
+  uint16_t V;
   // external registers
   uint8_t PPUCTRL;   // WRITE 0x2000
   uint8_t PPUMASK;   // WRITE 0x2001
@@ -32,19 +37,15 @@ struct ppu_2C02 {
   uint8_t PPUADDR;   // WRITE 2x 0x2006
   uint8_t PPUDATA;   // WRITE/READ 0x2007
   uint8_t OAMDMA;    // WRITE/READ 0x4014
-  // internal registers
-  uint16_t T;
-  uint16_t V;
-  uint8_t X;
-  bool W;
   // helpful things
   uint16_t scanline;
   uint16_t cycles;
   bool is_even_frame;
-  uint8_t memory[0x10000];
+  bool nmi_high;
   uint32_t pallete_ram[0x40];
   struct nsdl_manager *nsdl;
   struct Bus *bus;
+  uint8_t memory[0x800];
 };
 
 struct nsdl_manager {
