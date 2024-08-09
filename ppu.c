@@ -68,12 +68,14 @@ void ppu_tick(struct ppu_2C02 *const ppu) {
         break;
       }
       case 7: {
-        if (!(ppu->cycles == 256 || ppu->cycles == 248 ||
-              (ppu->scanline == 239 && (ppu->cycles == 328 || ppu->cycles == 336)) ||
-              (ppu->cycles < 328 && ppu->scanline == 261))) {
-          populate_frame(ppu, pattern_table_lower, pattern_table_upper);
+        if (ppu->PPUMASK & RENDERON) {
+          if (!((ppu->cycles == 256 || ppu->cycles == 240 ||
+                 ppu->scanline == 239 && (ppu->cycles == 328 || ppu->cycles == 336)) ||
+                (ppu->cycles < 328 && ppu->scanline == 261))) {
+            populate_frame(ppu, pattern_table_lower, pattern_table_upper);
+          }
+          coarse_x_increment(ppu);
         }
-        coarse_x_increment(ppu);
         break;
       }
       }
@@ -315,7 +317,7 @@ void populate_frame(struct ppu_2C02 *const ppu, const uint16_t pattern_table_low
   if (offset == WINDOW_AREA) {
     nsdl_update_texture(ppu->nsdl, pixels);
     offset = 0;
-    /*printf("vram:\n");
+    printf("vram:\n");
     for (int i = 0; i < 0x800; i++) {
       printf("%2X ", ppu->memory[i]);
       if (i % 32 == 0) {
@@ -325,7 +327,7 @@ void populate_frame(struct ppu_2C02 *const ppu, const uint16_t pattern_table_low
         printf("\n");
       }
     }
-    printf("\n");*/
+    printf("\n");
   }
   // printf("nametable: 0x%X, attribute_table: 0x%X, pattern_table_lower: 0x%X, pattern_table_upper: 0x%X\n", nametable,
   // attribute_table, pattern_table_lower, pattern_table_upper);
