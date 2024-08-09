@@ -27,10 +27,11 @@ void ppu_tick(struct ppu_2C02 *const ppu) {
   static uint8_t attribute_table;
   static uint16_t pattern_table_lower;
   static uint16_t pattern_table_upper;
-  static uint16_t counter = 0;
   static uint8_t old_ppu_status = 0;
   static uint8_t old_ppu_ctrl = 0;
   static bool nmi_high = false;
+  printf("PPUCTRL: 0x%2X, PPUMASK: 0x%2X, PPUSTATUS: 0x%2X, X: 0x%2X, W: %X, T: 0x%4X, V: 0x%4X, name_table: 0x%4X\n",
+         ppu->PPUCTRL, ppu->PPUMASK, ppu->PPUSTATUS, ppu->X, ppu->W, ppu->T, ppu->V, 0x2000 | (ppu->V & 0x0FFF));
   if ((old_ppu_status & BIT7) != (ppu->PPUSTATUS & BIT7)) {
     nmi_high = true;
     old_ppu_status = ppu->PPUSTATUS;
@@ -39,7 +40,6 @@ void ppu_tick(struct ppu_2C02 *const ppu) {
     nmi_high = true;
     old_ppu_ctrl = ppu->PPUCTRL;
   }
-  // printf("PPU->PPUSTATUS: 0x%X, PPU->PPUCTRL: 0x%X\n", ppu->PPUSTATUS, ppu->PPUCTRL);
   if (ppu->PPUSTATUS & ppu->PPUCTRL & BIT7 && nmi_high) {
     ppu->bus->cpu->interrupt_state = INONMASKABLE;
     nmi_high = false;
@@ -77,7 +77,7 @@ void ppu_tick(struct ppu_2C02 *const ppu) {
         break;
       }
       }
-      if (ppu->cycles == 256 && (ppu->PPUMASK & RENDERON)) {
+      if (ppu->cycles == 256) {
         y_increment(ppu);
       }
       if (ppu->cycles == 257 && (ppu->PPUMASK & RENDERON)) {
@@ -117,7 +117,6 @@ void ppu_tick(struct ppu_2C02 *const ppu) {
 // **********************
 
 void ppuctrl_write(struct ppu_2C02 *const ppu, const uint8_t value) {
-  printf("value: 0x%X\n", value);
   ppu->T = (ppu->T & 0b1111001111111111) + ((((uint16_t)value) & 0b00000011) << 10);
   ppu->PPUCTRL = value;
 }
@@ -163,11 +162,13 @@ void ppuaddr_write(struct ppu_2C02 *const ppu, const uint8_t value) {
 void ppudata_write(struct ppu_2C02 *const ppu, const uint8_t value) {
   // if is rendering
   if (ppu->V >= 0x2000 && ppu->V <= 0x2FFF) {
-    printf("write to: 0x%X\n", ppu->V);
+    // printf("write to: 0x%X\n", ppu->V);
   }
   bus_write(ppu->bus, ppu->V, value, PPUMEM);
   ppu->PPUDATA = value;
-  ppudata_update_v(ppu);
+  if (ppu->V < 0x4000) {
+    ppudata_update_v(ppu);
+  }
 }
 
 // ***********************
@@ -187,7 +188,9 @@ uint8_t ppudata_read(struct ppu_2C02 *const ppu) {
   static uint8_t buffer = 0;
   const uint8_t return_val = buffer;
   buffer = bus_read(ppu->bus, ppu->V, PPUMEM);
-  ppudata_update_v(ppu);
+  if (ppu->V < 0x4000) {
+    ppudata_update_v(ppu);
+  }
   return return_val;
 }
 
@@ -207,30 +210,34 @@ void ppudata_update_v(struct ppu_2C02 *const ppu) {
 void coarse_x_increment(struct ppu_2C02 *const ppu) {
   // printf("scanline: %d, cycle: %d, ppu->V: 0x%4X, counter: %d\n", ppu->scanline, ppu->cycles,
   //       0x2000 | (ppu->V & 0x0FFF), counter);
-  if ((ppu->V & 0x001F) == 31) { // if course X == 31
-    ppu->V &= ~0x001F;           // coarse X = 0
-    ppu->V ^= 0x0400;            // Switch horizontal nametable
-  } else {
-    ppu->V += 1; // increment coarse x
+  if (ppu->PPUMASK & RENDERON) {
+    if ((ppu->V & 0x001F) == 31) { // if course X == 31
+      ppu->V &= ~0x001F;           // coarse X = 0
+      ppu->V ^= 0x0400;            // Switch horizontal nametable
+    } else {
+      ppu->V += 1; // increment coarse x
+    }
   }
 }
 // THIS IS MESSED UP
 // copied from: https://www.nesdev.org/wiki/PPU_scrolling#Y_increment
 void y_increment(struct ppu_2C02 *const ppu) {
-  if ((ppu->V & 0x7000) != 0x7000) { // if fine Y < 7
-    ppu->V += 0x1000;                // incremenet fine Y
-  } else {
-    ppu->V &= ~0x7000;                   // fine Y = 0
-    uint16_t y = (ppu->V & 0x03E0) >> 5; // let y = course Y
-    if (y == 29) {
-      y = 0;              // coarse Y = 0
-      ppu->V ^= 0x0800;   // coarse Y = 0
-    } else if (y == 31) { // switch vertical nametable
-      y = 0;              // coarse Y = 0, nametable not switched
+  if (ppu->PPUMASK & RENDERON) {
+    if ((ppu->V & 0x7000) != 0x7000) { // if fine Y < 7
+      ppu->V += 0x1000;                // incremenet fine Y
     } else {
-      y += 1; // increment coarse Y
+      ppu->V &= ~0x7000;                   // fine Y = 0
+      uint16_t y = (ppu->V & 0x03E0) >> 5; // let y = course Y
+      if (y == 29) {
+        y = 0;              // coarse Y = 0
+        ppu->V ^= 0x0800;   // coarse Y = 0
+      } else if (y == 31) { // switch vertical nametable
+        y = 0;              // coarse Y = 0, nametable not switched
+      } else {
+        y += 1; // increment coarse Y
+      }
+      ppu->V = (ppu->V & ~0x03E0) | (y << 5); // put coarse Y back into V
     }
-    ppu->V = (ppu->V & ~0x03E0) | (y << 5); // put coarse Y back into V
   }
 }
 
@@ -308,7 +315,7 @@ void populate_frame(struct ppu_2C02 *const ppu, const uint16_t pattern_table_low
   if (offset == WINDOW_AREA) {
     nsdl_update_texture(ppu->nsdl, pixels);
     offset = 0;
-    printf("vram:\n");
+    /*printf("vram:\n");
     for (int i = 0; i < 0x800; i++) {
       printf("%2X ", ppu->memory[i]);
       if (i % 32 == 0) {
@@ -318,7 +325,7 @@ void populate_frame(struct ppu_2C02 *const ppu, const uint16_t pattern_table_low
         printf("\n");
       }
     }
-    printf("\n");
+    printf("\n");*/
   }
   // printf("nametable: 0x%X, attribute_table: 0x%X, pattern_table_lower: 0x%X, pattern_table_upper: 0x%X\n", nametable,
   // attribute_table, pattern_table_lower, pattern_table_upper);
