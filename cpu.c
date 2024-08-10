@@ -31,7 +31,7 @@ uint8_t cpu_run(struct cpu_6502 *const cpu) {
   const uint8_t opcode = bus_read(cpu->bus, cpu->PC, CPUMEM);
   cycles += cpu->instr[opcode].cycles;
   // run the output
-  testCpuPart(*cpu, cpu->instr[opcode]);
+  // testCpuPart(*cpu, cpu->instr[opcode]);
   // assert(cpu->instr[opcode].fp_instruction != NULL);
   if (cpu->instr[opcode].fp_instruction == NULL) {
     return 0;
