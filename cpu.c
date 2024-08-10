@@ -65,6 +65,7 @@ void cpu_reset(struct cpu_6502 *cpu) {
 }
 
 uint8_t NMI(struct cpu_6502 *cpu) {
+  cpu->SR.Break = 0;
   bus_write(cpu->bus, cpu->SP + 0x0100, (cpu->PC & 0xFF00) >> 8, CPUMEM);
   cpu->SP--;
   bus_write(cpu->bus, cpu->SP + 0x0100, cpu->PC & 0x00FF, CPUMEM);
@@ -73,13 +74,13 @@ uint8_t NMI(struct cpu_6502 *cpu) {
   cpu->SP--;
   cpu->PC = (((uint16_t)(bus_read(cpu->bus, 0xFFFB, CPUMEM)) << 8) & 0xFF00) +
             ((uint16_t)(bus_read(cpu->bus, 0xFFFA, CPUMEM)));
-  cpu->SR.Break = 0;
-  cpu->SR.Interrupt = 1;
   return 7;
 }
 
 uint8_t IRQ(struct cpu_6502 *cpu) {
   if (cpu->SR.Interrupt == 0) {
+    cpu->SR.Break = 0;
+    cpu->SR.Interrupt = 1;
     bus_write(cpu->bus, cpu->SP + 0x0100, (cpu->PC & 0xFF00) >> 8, CPUMEM);
     cpu->SP--;
     bus_write(cpu->bus, cpu->SP + 0x0100, cpu->PC & 0x00FF, CPUMEM);
@@ -88,8 +89,6 @@ uint8_t IRQ(struct cpu_6502 *cpu) {
     cpu->SP--;
     cpu->PC = (((uint16_t)(bus_read(cpu->bus, 0xFFFF, CPUMEM)) << 8) & 0xFF00) +
               ((uint16_t)(bus_read(cpu->bus, 0xFFFE, CPUMEM)));
-    cpu->SR.Break = 0;
-    cpu->SR.Interrupt = 1;
     return 7;
   }
   return 0;

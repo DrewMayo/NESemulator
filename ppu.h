@@ -10,6 +10,7 @@
 #define REGISTERX 0x041F
 #define REGISTERY 0x7BE0
 #define RENDERON 0x18
+#define NAMETABLE 0x0C00
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_events.h>
