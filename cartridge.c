@@ -54,11 +54,11 @@ struct cartridge *cart_build(const char *filename) {
 uint8_t cart_read_prg_memory(struct cartridge *cart, uint16_t mem_location) {
   switch (cart->mapper) {
   case 0: {
-    mem_location %= 0x8000;
+    mem_location -= 0x8000;
     if (cart->header[4] == 1) {
       mem_location %= PRG_ROM_SIZE;
       return cart->prg_rom[mem_location];
-    } else {
+    } else if (cart->header[4] == 2) {
       return cart->prg_rom[mem_location];
     }
   }
@@ -69,11 +69,11 @@ uint8_t cart_read_prg_memory(struct cartridge *cart, uint16_t mem_location) {
 void cart_write_prg_memory(struct cartridge *cart, uint16_t mem_location, uint8_t value) {
   switch (cart->mapper) {
   case 0: {
-    mem_location %= 0x8000;
+    mem_location -=0x8000;
     if (cart->header[4] == 1) {
       mem_location %= PRG_ROM_SIZE;
       cart->prg_rom[mem_location] = value;
-    } else {
+    } else if (cart->header[4] == 2){
       cart->prg_rom[mem_location] = value;
     }
   }
