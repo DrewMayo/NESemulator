@@ -9,10 +9,8 @@
 
 uint8_t cpu_combine_SR(struct status_reg SR);
 void cpu_expand_SR(struct cpu_6502 *cpu, uint8_t SR);
-uint8_t page_crossed(const enum addr_mode_states addr_mode,
-                     const struct cpu_6502 *cpu, uint16_t mem_addr);
-uint16_t fetch_addr_mode(const enum addr_mode_states addr_mode,
-                         struct cpu_6502 *cpu);
+uint8_t page_crossed(const enum addr_mode_states addr_mode, const struct cpu_6502 *cpu, uint16_t mem_addr);
+uint16_t fetch_addr_mode(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu);
 uint8_t NMI(struct cpu_6502 *cpu);
 uint8_t IRQ(struct cpu_6502 *cpu);
 void cpu_reset(struct cpu_6502 *cpu);
@@ -38,8 +36,7 @@ uint8_t cpu_run(struct cpu_6502 *const cpu) {
     cpu->PC++;
     return 0;
   }
-  cycles +=
-      cpu->instr[opcode].fp_instruction(cpu->instr[opcode].addr_mode, cpu);
+  cycles += cpu->instr[opcode].fp_instruction(cpu->instr[opcode].addr_mode, cpu);
   cpu->PC++;
   cpu->cycles += cycles;
   // cycles += IRQ(cpu);
@@ -319,8 +316,7 @@ uint8_t CPY(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
 
 uint8_t DEC(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
-  bus_write(cpu->bus, mem_addr, bus_read(cpu->bus, mem_addr, CPUMEM) - 1,
-            CPUMEM);
+  bus_write(cpu->bus, mem_addr, bus_read(cpu->bus, mem_addr, CPUMEM) - 1, CPUMEM);
 
   cpu->SR.Zero = bus_read(cpu->bus, mem_addr, CPUMEM) == 0;
   cpu->SR.Negative = bus_read(cpu->bus, mem_addr, CPUMEM) & BIT7;
@@ -522,10 +518,8 @@ uint8_t RTI(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
   cpu->SP++;
   cpu_expand_SR(cpu, bus_read(cpu->bus, 0x0100 + cpu->SP, CPUMEM));
-  cpu->PC =
-      ((uint16_t)bus_read(cpu->bus, 0x0100 + ((cpu->SP + 2) & 0xFF), CPUMEM)
-       << 8) +
-      bus_read(cpu->bus, 0x0100 + ((cpu->SP + 1) & 0xFF), CPUMEM) - 1;
+  cpu->PC = ((uint16_t)bus_read(cpu->bus, 0x0100 + ((cpu->SP + 2) & 0xFF), CPUMEM) << 8) +
+            bus_read(cpu->bus, 0x0100 + ((cpu->SP + 1) & 0xFF), CPUMEM) - 1;
   cpu->SR.Break = 0;
   cpu->SP += 2;
   return 0;
@@ -533,10 +527,8 @@ uint8_t RTI(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
 
 uint8_t RTS(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   (void)addr_mode;
-  cpu->PC =
-      ((uint16_t)bus_read(cpu->bus, 0x0100 + ((cpu->SP + 2) & 0xFF), CPUMEM)
-       << 8) +
-      bus_read(cpu->bus, 0x0100 + ((cpu->SP + 1) & 0xFF), CPUMEM);
+  cpu->PC = ((uint16_t)bus_read(cpu->bus, 0x0100 + ((cpu->SP + 2) & 0xFF), CPUMEM) << 8) +
+            bus_read(cpu->bus, 0x0100 + ((cpu->SP + 1) & 0xFF), CPUMEM);
   cpu->SP += 2;
   return 0;
 }
@@ -880,12 +872,9 @@ uint8_t SBX(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
 // gets the correct cpu->memory address to be used by the corresponding opcode
 // returns a 16 bit integer containing the propper cpu->memory address
 
-bool is_page_crossed(const uint16_t addr1, const uint16_t addr2) {
-  return (addr1 & 0xFF00) != (addr2 & 0xFF00);
-}
+bool is_page_crossed(const uint16_t addr1, const uint16_t addr2) { return (addr1 & 0xFF00) != (addr2 & 0xFF00); }
 
-uint8_t page_crossed(const enum addr_mode_states addr_mode,
-                     const struct cpu_6502 *cpu, uint16_t mem_addr) {
+uint8_t page_crossed(const enum addr_mode_states addr_mode, const struct cpu_6502 *cpu, uint16_t mem_addr) {
   switch (addr_mode) {
   case ABSOLUTEX:
     return is_page_crossed(mem_addr - cpu->X, mem_addr);
@@ -899,12 +888,9 @@ uint8_t page_crossed(const enum addr_mode_states addr_mode,
     // from the next PC
     mem_addr += 1;
     if (bus_read(cpu->bus, cpu->PC, CPUMEM) < 128) {
-      return is_page_crossed(
-          mem_addr, mem_addr - (uint16_t)bus_read(cpu->bus, cpu->PC, CPUMEM));
+      return is_page_crossed(mem_addr, mem_addr - (uint16_t)bus_read(cpu->bus, cpu->PC, CPUMEM));
     } else {
-      return is_page_crossed(
-          mem_addr,
-          mem_addr + (uint8_t)(~(bus_read(cpu->bus, cpu->PC, CPUMEM)) + 1));
+      return is_page_crossed(mem_addr, mem_addr + (uint8_t)(~(bus_read(cpu->bus, cpu->PC, CPUMEM)) + 1));
     }
     break;
   }
@@ -915,8 +901,7 @@ uint8_t page_crossed(const enum addr_mode_states addr_mode,
   }
 }
 
-uint16_t fetch_addr_mode(const enum addr_mode_states addr_mode,
-                         struct cpu_6502 *cpu) {
+uint16_t fetch_addr_mode(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   uint16_t param = 0;
   switch (addr_mode) {
   case IMPLIED: {
@@ -952,39 +937,33 @@ uint16_t fetch_addr_mode(const enum addr_mode_states addr_mode,
   }
   case ABSOLUTE: {
     const uint16_t mem_access =
-        bus_read(cpu->bus, cpu->PC + 1, CPUMEM) +
-        ((uint16_t)bus_read(cpu->bus, cpu->PC + 2, CPUMEM) << 8);
+        bus_read(cpu->bus, cpu->PC + 1, CPUMEM) + ((uint16_t)bus_read(cpu->bus, cpu->PC + 2, CPUMEM) << 8);
     param = mem_access;
     cpu->PC += 2;
     break;
   }
   case ABSOLUTEX: {
     const uint16_t mem_access =
-        bus_read(cpu->bus, cpu->PC + 1, CPUMEM) +
-        ((uint16_t)bus_read(cpu->bus, cpu->PC + 2, CPUMEM) << 8);
+        bus_read(cpu->bus, cpu->PC + 1, CPUMEM) + ((uint16_t)bus_read(cpu->bus, cpu->PC + 2, CPUMEM) << 8);
     param = mem_access + cpu->X;
     cpu->PC += 2;
     break;
   }
   case ABSOLUTEY: {
     const uint16_t mem_access =
-        bus_read(cpu->bus, cpu->PC + 1, CPUMEM) +
-        ((uint16_t)bus_read(cpu->bus, cpu->PC + 2, CPUMEM) << 8);
+        bus_read(cpu->bus, cpu->PC + 1, CPUMEM) + ((uint16_t)bus_read(cpu->bus, cpu->PC + 2, CPUMEM) << 8);
     param = mem_access + cpu->Y;
     cpu->PC += 2;
     break;
   }
   case INDIRECT: {
     const uint16_t mem_access =
-        bus_read(cpu->bus, cpu->PC + 1, CPUMEM) +
-        (((uint16_t)bus_read(cpu->bus, cpu->PC + 2, CPUMEM)) << 8);
-    param = ((uint16_t)bus_read(cpu->bus, mem_access + 1, CPUMEM) << 8) +
-            bus_read(cpu->bus, mem_access, CPUMEM);
+        bus_read(cpu->bus, cpu->PC + 1, CPUMEM) + (((uint16_t)bus_read(cpu->bus, cpu->PC + 2, CPUMEM)) << 8);
+    param = ((uint16_t)bus_read(cpu->bus, mem_access + 1, CPUMEM) << 8) + bus_read(cpu->bus, mem_access, CPUMEM);
     // handle the bug in the indirect vector goes to the same
     // page when crossing the page boundry
     if (((mem_access) & 0xFF) == 0xFF) {
-      param = ((uint16_t)bus_read(cpu->bus, mem_access & 0xFF00, CPUMEM) << 8) +
-              bus_read(cpu->bus, mem_access, CPUMEM);
+      param = ((uint16_t)bus_read(cpu->bus, mem_access & 0xFF00, CPUMEM) << 8) + bus_read(cpu->bus, mem_access, CPUMEM);
     }
     cpu->PC += 2;
     break;
@@ -993,9 +972,7 @@ uint16_t fetch_addr_mode(const enum addr_mode_states addr_mode,
     const uint8_t mem_access = bus_read(cpu->bus, cpu->PC + 1, CPUMEM);
     cpu->PC += 1;
     //&ed with 0xFF because of sign extensions
-    param =
-        ((uint16_t)bus_read(cpu->bus, (mem_access + cpu->X + 1) & 0xFF, CPUMEM))
-        << 8;
+    param = ((uint16_t)bus_read(cpu->bus, (mem_access + cpu->X + 1) & 0xFF, CPUMEM)) << 8;
     param += bus_read(cpu->bus, (mem_access + cpu->X) & 0xFF, CPUMEM);
     break;
   }
@@ -1003,8 +980,7 @@ uint16_t fetch_addr_mode(const enum addr_mode_states addr_mode,
     const uint8_t mem_access = bus_read(cpu->bus, cpu->PC + 1, CPUMEM);
     cpu->PC += 1;
     //&ed with 0xFF because of sign extensions
-    param = ((uint16_t)bus_read(cpu->bus, (mem_access + 1) & 0xFF, CPUMEM))
-            << 8;
+    param = ((uint16_t)bus_read(cpu->bus, (mem_access + 1) & 0xFF, CPUMEM)) << 8;
     param += bus_read(cpu->bus, mem_access & 0xFF, CPUMEM) + cpu->Y;
     break;
   }

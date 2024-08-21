@@ -4,13 +4,13 @@
 #define WINDOW_WIDTH 256
 #define WINDOW_HEIGHT 240
 #define WINDOW_AREA 61440
-#define PIXEL_WIDTH 32
-#define PIXEL_HEIGHT 30
-#define PIXEL_AREA 960
 #define REGISTERX 0x041F
 #define REGISTERY 0x7BE0
 #define RENDERON 0x18
+#define BGON 0x08
+#define SPRITEON 0x10
 #define NAMETABLE 0x0C00
+#define POWERUPCYCLE 29658
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_events.h>
@@ -42,7 +42,6 @@ struct ppu_2C02 {
   uint16_t scanline;
   uint16_t cycles;
   bool is_even_frame;
-  bool nmi_high;
   uint32_t pallete_ram[0x40];
   struct nsdl_manager *nsdl;
   struct Bus *bus;

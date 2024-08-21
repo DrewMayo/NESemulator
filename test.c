@@ -35,3 +35,10 @@ void testCpuPart(const struct cpu_6502 cpu, const struct instruction instr) {
   // printf("A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%d\n", cpu.AC, cpu.X, cpu.Y, cpu_combine_SR(cpu.SR), cpu.SP,
   //        cpu.cycles);
 }
+
+void test_ppu(const struct ppu_2C02 ppu) {
+  printf("Scanline: %3d, Cycles: %3d,PPUCTRL: 0x%2X, PPUMASK: 0x%2X, PPUSTATUS: 0x%2X, X: 0x%2X, W: %X, T: 0x%4X, V: "
+         "0x%4X, name_table: 0x%4X\n",
+         ppu.scanline, ppu.cycles, ppu.PPUCTRL, ppu.PPUMASK, ppu.PPUSTATUS, ppu.X, ppu.W, ppu.T, ppu.V,
+         0x2000 | (ppu.V & 0x0FFF));
+}
