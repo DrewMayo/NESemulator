@@ -35,13 +35,13 @@ void ppu_tick(struct ppu_2C02 *const ppu) {
   static uint16_t shift_reg_lo = 0;
   // pre proccessings such as printing info and generating the NMI for use in the cpu
   // test_ppu(*ppu);
-  check_generate_nmi(&ppu->bus->cpu->interrupt_state, ppu->PPUCTRL, ppu->PPUSTATUS);
   // actually tick
   if ((ppu->scanline < 240 || ppu->scanline == 261) && (ppu->PPUMASK & RENDERON)) {
     ppu_render_cycle(ppu, &shift_reg_hi, &shift_reg_lo);
   } else if (ppu->scanline == 241 && ppu->cycles == 1) {
     ppu->PPUSTATUS |= BIT7;
   }
+  check_generate_nmi(&ppu->bus->cpu->interrupt_state, ppu->PPUCTRL, ppu->PPUSTATUS);
   // shift_registers(ppu, &shift_reg_hi, &shift_reg_lo);
   check_scanline(ppu);
 }
@@ -84,7 +84,9 @@ void ppu_render_cycle(struct ppu_2C02 *const ppu, uint16_t *const shift_reg_hi, 
     }
     // inc hori(v)
     case 7: {
-      coarse_x_increment(ppu);
+      if (ppu->cycles != 256) {
+        coarse_x_increment(ppu);
+      }
       break;
     }
     }
@@ -150,12 +152,11 @@ void add_pixel(struct ppu_2C02 *const ppu, uint16_t *const shift_register_hi, ui
   static uint32_t pixels[WINDOW_AREA];
   static uint32_t offset = 0;
   uint32_t color = 0;
-  uint8_t value = (*shift_register_hi & (0x8000 >> ppu->X)) >> (14 << ppu->X) |
-                  (*shift_register_lo & (0x8000 >> ppu->X)) >> (15 << ppu->X);
+  uint8_t value = (*shift_register_hi & (0x8000 >> ppu->X)) >> (14) | (*shift_register_lo & (0x8000 >> ppu->X)) >> (15);
   if (offset == WINDOW_AREA) {
     nsdl_update_texture(ppu->nsdl, pixels);
     offset = 0;
-    printf("vram:\n");
+    /*printf("vram:\n");
     for (int i = 0; i < 0x800; i++) {
       printf("%2X ", ppu->memory[i]);
       if (i % 32 == 0) {
@@ -165,7 +166,7 @@ void add_pixel(struct ppu_2C02 *const ppu, uint16_t *const shift_register_hi, ui
         printf("\n");
       }
     }
-    printf("\n");
+    printf("\n");*/
   }
   switch (value) {
   case 0: {
@@ -243,7 +244,13 @@ void ppuaddr_write(struct ppu_2C02 *const ppu, const uint8_t value) {
   }
 }
 void ppudata_write(struct ppu_2C02 *const ppu, const uint8_t value) {
-  bus_write(ppu->bus, ppu->V, value, PPUMEM);
+  if ((ppu->scanline < 241 || ppu->scanline > 260)) {
+    // printf("PPUDATA WRITE OUTSIDE OF VBLANK, cycles: %d, ppuscanline: %d, ppucycles: %d\n", ppu->bus->cpu->cycles,
+    //      ppu->scanline, ppu->cycles);
+  }
+  if (ppu->V > 0x1FFF && ppu->V < 0x3000) {
+    bus_write(ppu->bus, ppu->V, value, PPUMEM);
+  }
   ppu->PPUDATA = value;
   ppudata_update_v(ppu);
 }
@@ -262,9 +269,15 @@ uint8_t ppustatus_read(struct ppu_2C02 *const ppu) {
 uint8_t oamdata_read(struct ppu_2C02 *const ppu) { return bus_read(ppu->bus, ppu->OAMADDR, PPUMEM); }
 
 uint8_t ppudata_read(struct ppu_2C02 *const ppu) {
+  if ((ppu->scanline < 241 || ppu->scanline > 260)) {
+    // printf("PPUDATA READ OUTSIDE OF VBLANK, cycles: %d, ppuscanline: %d, ppucycles: %d\n", ppu->bus->cpu->cycles,
+    //     ppu->scanline, ppu->cycles);
+  }
   static uint8_t buffer = 0;
   const uint8_t return_val = buffer;
-  buffer = bus_read(ppu->bus, ppu->V, PPUMEM);
+  if (ppu->V > 0x1FFF && ppu->V < 0x3000) {
+    buffer = bus_read(ppu->bus, ppu->V, PPUMEM);
+  }
   ppudata_update_v(ppu);
   return return_val;
 }
@@ -274,11 +287,8 @@ uint8_t ppudata_read(struct ppu_2C02 *const ppu) {
 // ***********************
 
 void ppudata_update_v(struct ppu_2C02 *const ppu) {
-  if (ppu->PPUCTRL & BIT2) {
-    ppu->V += 32;
-  } else {
-    ppu->V += 1;
-  }
+  // printf("inc_v, scanline: %d, cycles %d\n", ppu->scanline, ppu->cycles);
+  ppu->V += (ppu->PPUCTRL & BIT2) ? 32 : 1;
 }
 
 // copied from: https://www.nesdev.org/wiki/PPU_scrolling#Coarse_X_increment

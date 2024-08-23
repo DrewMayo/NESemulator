@@ -48,7 +48,7 @@ void bus_write(struct Bus *const bus, uint16_t addr, const uint8_t value, const 
     addr &= 0x3FFF;
     if (addr <= 0x1FFF) {
       // CHR-ROM
-      //      bus_write(bus, addr, value, CHRCARTMEM);
+      bus_write(bus, addr, value, CHRCARTMEM);
     } else if (addr >= 0x2000 && addr <= 0x2FFF) {
       // INTERNAL VRAM 2 KiB
       // printf("Address before: 0x%X\n", addr);
@@ -59,7 +59,7 @@ void bus_write(struct Bus *const bus, uint16_t addr, const uint8_t value, const 
     } else if (addr >= 0x3000 && addr <= 0x3EFF) {
       // UNUSED
       addr -= 0x1000;
-      //bus_write(bus, addr, value, PPUMEM);
+      // bus_write(bus, addr, value, PPUMEM);
     } else if (addr >= 0x3F00 && addr <= 0x3F1F) {
       // INTERNAL PALLETE RAM bus->ppu->memory[addr] = value;
       break;

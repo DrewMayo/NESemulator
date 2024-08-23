@@ -16,12 +16,14 @@ int main(int argc, char *argv[]) {
     return -2;
   }
   // running
-  //  emu->cpu->PC = 0xC000;
+  // emu->cpu->PC = 0xC000;
   bool quit = false;
   SDL_Event e;
   while (!quit) {
     int cycles = cpu_run(emu->cpu);
-    for (int i = 0; i < cycles * 3; i++) {
+    for (int i = 0; i < cycles; i++) {
+      ppu_tick(emu->ppu);
+      ppu_tick(emu->ppu);
       ppu_tick(emu->ppu);
     }
     // YOU SHOULD PROFILE WHY THIS IS SO SLOW

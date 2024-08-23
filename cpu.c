@@ -22,16 +22,17 @@ uint8_t cpu_run(struct cpu_6502 *const cpu) {
   uint8_t cycles = 0;
   if (cpu->interrupt_state == INONMASKABLE) {
     cycles += NMI(cpu);
-    printf("NMI\n");
+    // printf("NMI, ppuscan: %d, ppucycle: %d\n", cpu->bus->ppu->scanline, cpu->bus->ppu->cycles);
     cpu->interrupt_state = NOINTERRUPT;
     return cycles;
   }
+  for (int i = 0; i < 0x255; i++) {
+    printf("%c", bus_read(cpu->bus, 0x6004 + i, CPUMEM));
+  }
   // check for non-maskable interrupt coming from the PPU
   const uint8_t opcode = bus_read(cpu->bus, cpu->PC, CPUMEM);
-  cycles += cpu->instr[opcode].cycles;
-  // run the output
   // testCpuPart(*cpu, cpu->instr[opcode]);
-  // assert(cpu->instr[opcode].fp_instruction != NULL);
+  cycles += cpu->instr[opcode].cycles;
   if (cpu->instr[opcode].fp_instruction == NULL) {
     cpu->PC++;
     return 0;
@@ -843,7 +844,9 @@ uint8_t LXA(const enum addr_mode_states addr_mode, struct cpu_6502 *cpu) {
   const uint16_t mem_addr = fetch_addr_mode(addr_mode, cpu);
   // note that different systems have different magic numbers
   // in this case to pass tom harte tests it is 0xEE
-  cpu->AC = (cpu->AC | 0xEE) & bus_read(cpu->bus, mem_addr, CPUMEM);
+  // 0xFF to pass blarggs. It is really a matter of choice here
+  // but since I am using emulating nsct then I will use 0xFF
+  cpu->AC = (cpu->AC | 0xFF) & bus_read(cpu->bus, mem_addr, CPUMEM);
   cpu->X = cpu->AC;
   cpu->SR.Zero = cpu->AC == 0;
   cpu->SR.Negative = cpu->AC & BIT7;
